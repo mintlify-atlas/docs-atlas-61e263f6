@@ -1,0 +1,909 @@
+---
+title: 'MCP Tools Reference'
+description: 'Complete reference for all MCP server tools and their parameters'
+---
+
+## Available Tools
+
+The PairOfCleats MCP server exposes the following tools:
+
+- [index_status](#index_status) - Check index and cache status
+- [config_status](#config_status) - Inspect configuration and warnings
+- [build_index](#build_index) - Build or update indexes
+- [build_sqlite_index](#build_sqlite_index) - Build SQLite indexes
+- [compact_sqlite_index](#compact_sqlite_index) - Compact SQLite databases
+- [search](#search) - Run search queries
+- [search_workspace](#search_workspace) - Federated workspace search
+- [triage_ingest](#triage_ingest) - Ingest vulnerability findings
+- [triage_decision](#triage_decision) - Create triage decisions
+- [triage_context_pack](#triage_context_pack) - Generate triage context
+- [download_models](#download_models) - Download embedding models
+- [download_dictionaries](#download_dictionaries) - Download dictionary wordlists
+- [download_extensions](#download_extensions) - Download SQLite extensions
+- [verify_extensions](#verify_extensions) - Verify extension availability
+- [cache_gc](#cache_gc) - Garbage collect caches
+- [clean_artifacts](#clean_artifacts) - Remove cache artifacts
+- [bootstrap](#bootstrap) - Bootstrap complete setup
+- [report_artifacts](#report_artifacts) - Report artifact sizes
+
+---
+
+## index_status
+
+Return cache and index status for a repository.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+### Response
+
+Returns a detailed status report including:
+
+- Repository metadata (path, ID, git status)
+- Cache directories and paths
+- Index artifact status (code, prose, records)
+- SQLite database status
+- Model and dictionary availability
+- Metrics file locations
+
+### Example
+
+```json
+{
+  "repoPath": "/path/to/repo",
+  "repoId": "abc123",
+  "git": {
+    "isRepo": true,
+    "head": "a1b2c3d4",
+    "branch": "main",
+    "isDirty": false
+  },
+  "index": {
+    "code": {
+      "dir": "/cache/repo/index-code",
+      "chunkMeta": { "exists": true, "mtime": "2024-03-04T12:00:00Z", "bytes": 1048576 },
+      "tokenPostings": { "exists": true, "mtime": "2024-03-04T12:00:00Z", "bytes": 524288 }
+    }
+  }
+}
+```
+
+---
+
+## config_status
+
+Inspect configuration and cache status with capability warnings.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+### Response
+
+Returns:
+
+- Current configuration (all config blocks)
+- System capabilities
+- Cache status and availability
+- Warnings for missing dependencies or configuration issues
+
+### Example
+
+```json
+{
+  "repoPath": "/path/to/repo",
+  "capabilities": {
+    "mcp": { "sdk": true },
+    "watcher": { "parcel": false }
+  },
+  "warnings": [
+    {
+      "code": "model_missing",
+      "message": "Embedding model not found. Run node tools/download/models.js."
+    }
+  ]
+}
+```
+
+---
+
+## build_index
+
+Build or update indexes for a repository with optional SQLite and incremental support.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="mode" type="string" default="all">
+  Index mode: `all`, `code`, `prose`, `extracted-prose`, or `records`
+</ParamField>
+
+<ParamField path="incremental" type="boolean" default={false}>
+  Reuse per-file incremental cache
+</ParamField>
+
+<ParamField path="sqlite" type="boolean">
+  Build SQLite indexes after JSON indexes (defaults to config setting)
+</ParamField>
+
+<ParamField path="stubEmbeddings" type="boolean" default={false}>
+  Skip model downloads and use stub embeddings for testing
+</ParamField>
+
+<ParamField path="useArtifacts" type="boolean" default={false}>
+  Restore CI artifacts before building
+</ParamField>
+
+<ParamField path="artifactsDir" type="string">
+  Path to CI artifacts directory (required if useArtifacts is true)
+</ParamField>
+
+### Response
+
+```json
+{
+  "repoPath": "/path/to/repo",
+  "mode": "all",
+  "sqlite": true,
+  "incremental": false,
+  "restoredArtifacts": false
+}
+```
+
+<Note>
+This is a long-running tool that emits progress notifications. Default timeout is extended for index builds.
+</Note>
+
+---
+
+## build_sqlite_index
+
+Build SQLite indexes from JSON artifacts.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="mode" type="string">
+  SQLite mode: `all`, `code`, or `prose`
+</ParamField>
+
+<ParamField path="incremental" type="boolean" default={false}>
+  Build incrementally if supported
+</ParamField>
+
+<ParamField path="compact" type="boolean" default={false}>
+  Compact database after build
+</ParamField>
+
+<ParamField path="codeDir" type="string">
+  Override code index directory
+</ParamField>
+
+<ParamField path="proseDir" type="string">
+  Override prose index directory
+</ParamField>
+
+<ParamField path="out" type="string">
+  Override output database path
+</ParamField>
+
+---
+
+## compact_sqlite_index
+
+Compact SQLite indexes to prune unused rows and reclaim space.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="mode" type="string">
+  Compact mode: `all`, `code`, or `prose`
+</ParamField>
+
+<ParamField path="dryRun" type="boolean" default={false}>
+  Preview changes without modifying files
+</ParamField>
+
+<ParamField path="keepBackup" type="boolean" default={false}>
+  Retain backup copy after compaction
+</ParamField>
+
+---
+
+## search
+
+Run a search query against the repository index.
+
+### Parameters
+
+<ParamField path="query" type="string" required>
+  Search query string
+</ParamField>
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="mode" type="string" default="both">
+  Search mode: `both`, `code`, `prose`, `extracted-prose`, `records`, or `all`
+</ParamField>
+
+<ParamField path="top" type="number" default={10}>
+  Maximum number of results to return
+</ParamField>
+
+<ParamField path="output" type="string" default="compact">
+  Output format: `compact` or `full`
+</ParamField>
+
+<ParamField path="backend" type="string">
+  Search backend: `memory`, `sqlite`, or `sqlite-fts`
+</ParamField>
+
+<ParamField path="ann" type="boolean">
+  Enable ANN re-ranking (defaults to config setting)
+</ParamField>
+
+### Filter Parameters
+
+<ParamField path="ext" type="string">
+  File extension filter (e.g., `.js`, `.py`)
+</ParamField>
+
+<ParamField path="lang" type="string">
+  Language filter (maps to extensions)
+</ParamField>
+
+<ParamField path="file" type="string">
+  Substring or regex match for file paths
+</ParamField>
+
+<ParamField path="path" type="string">
+  Substring or regex match for file paths (alias for file)
+</ParamField>
+
+<ParamField path="type" type="string">
+  Filter by chunk kind/type (e.g., `function`, `class`, `method`)
+</ParamField>
+
+<ParamField path="author" type="string">
+  Filter by last author (git)
+</ParamField>
+
+<ParamField path="chunkAuthor" type="string">
+  Filter by chunk author (git blame)
+</ParamField>
+
+<ParamField path="branch" type="string">
+  Git branch filter
+</ParamField>
+
+<ParamField path="modifiedAfter" type="string">
+  Filter by last modified date (ISO date string)
+</ParamField>
+
+<ParamField path="modifiedSince" type="number">
+  Filter by last modified recency in days
+</ParamField>
+
+<ParamField path="churnMin" type="number">
+  Minimum git churn (added + deleted lines)
+</ParamField>
+
+### Code Analysis Filters
+
+<ParamField path="calls" type="string">
+  Filter by call relationships
+</ParamField>
+
+<ParamField path="import" type="string">
+  Filter by imported module
+</ParamField>
+
+<ParamField path="extends" type="string">
+  Filter by inheritance
+</ParamField>
+
+<ParamField path="decorator" type="string">
+  Filter by decorator/attribute
+</ParamField>
+
+<ParamField path="param" type="string">
+  Filter by parameter name
+</ParamField>
+
+<ParamField path="returnType" type="string">
+  Filter by return type
+</ParamField>
+
+<ParamField path="inferredType" type="string">
+  Filter by inferred type
+</ParamField>
+
+<ParamField path="signature" type="string">
+  Filter by signature text
+</ParamField>
+
+<ParamField path="visibility" type="string">
+  Filter by visibility (e.g., `public`, `private`)
+</ParamField>
+
+<ParamField path="async" type="boolean">
+  Filter async constructs
+</ParamField>
+
+<ParamField path="generator" type="boolean">
+  Filter generator constructs
+</ParamField>
+
+<ParamField path="returns" type="boolean">
+  Filter chunks with return statements
+</ParamField>
+
+<ParamField path="throws" type="string">
+  Filter by throws/raises
+</ParamField>
+
+### Dataflow Filters
+
+<ParamField path="reads" type="string">
+  Filter by read dataflow
+</ParamField>
+
+<ParamField path="writes" type="string">
+  Filter by write dataflow
+</ParamField>
+
+<ParamField path="mutates" type="string">
+  Filter by mutation dataflow
+</ParamField>
+
+<ParamField path="alias" type="string">
+  Filter by alias dataflow
+</ParamField>
+
+<ParamField path="uses" type="string">
+  Filter by identifier usage
+</ParamField>
+
+<ParamField path="awaits" type="string">
+  Filter by await targets
+</ParamField>
+
+### Complexity Filters
+
+<ParamField path="loopsMin" type="number">
+  Minimum loop count
+</ParamField>
+
+<ParamField path="branchesMin" type="number">
+  Minimum branch count
+</ParamField>
+
+<ParamField path="breaksMin" type="number">
+  Minimum break count
+</ParamField>
+
+<ParamField path="continuesMin" type="number">
+  Minimum continue count
+</ParamField>
+
+### Risk Filters
+
+<ParamField path="risk" type="string">
+  Filter by risk tag
+</ParamField>
+
+<ParamField path="riskCategory" type="string">
+  Filter by risk category
+</ParamField>
+
+<ParamField path="riskTag" type="string">
+  Filter by risk tag
+</ParamField>
+
+<ParamField path="riskSource" type="string">
+  Filter by risk source
+</ParamField>
+
+<ParamField path="riskSink" type="string">
+  Filter by risk sink
+</ParamField>
+
+<ParamField path="riskFlow" type="string">
+  Filter by risk flow
+</ParamField>
+
+### Records Filters
+
+<ParamField path="meta" type="object">
+  Metadata filters for records (key/value object)
+</ParamField>
+
+<ParamField path="metaJson" type="string">
+  JSON metadata filters for records
+</ParamField>
+
+<ParamField path="lint" type="boolean">
+  Filter chunks with lint results
+</ParamField>
+
+### Advanced Options
+
+<ParamField path="case" type="boolean" default={false}>
+  Case-sensitive matching for file/path and tokens
+</ParamField>
+
+<ParamField path="caseFile" type="boolean" default={false}>
+  Case-sensitive file/path matching
+</ParamField>
+
+<ParamField path="caseTokens" type="boolean" default={false}>
+  Case-sensitive token matching
+</ParamField>
+
+<ParamField path="context" type="number">
+  Number of context lines around matches
+</ParamField>
+
+<ParamField path="allowSparseFallback" type="boolean">
+  Allow ANN fallback when sparse-only is requested but unavailable
+</ParamField>
+
+<ParamField path="allowUnsafeMix" type="boolean">
+  Allow compatibility/profile cohort mixing when keys don't match
+</ParamField>
+
+---
+
+## search_workspace
+
+Run federated search across repositories from a workspace configuration.
+
+### Parameters
+
+<ParamField path="workspacePath" type="string" required>
+  Workspace configuration file path (.jsonc)
+</ParamField>
+
+<ParamField path="query" type="string" required>
+  Search query string
+</ParamField>
+
+<ParamField path="workspaceId" type="string">
+  Expected workspace repoSetId for cross-check validation
+</ParamField>
+
+<ParamField path="search" type="object">
+  Single-repo search parameters forwarded to each repository (mode, top, backend, filters, etc.)
+</ParamField>
+
+<ParamField path="select.repos" type="string | string[]">
+  Filter to specific repositories
+</ParamField>
+
+<ParamField path="select.tags" type="string | string[]">
+  Filter by repository tags
+</ParamField>
+
+<ParamField path="select.repoFilter" type="string | string[]">
+  Regex filter for repository selection
+</ParamField>
+
+<ParamField path="select.includeDisabled" type="boolean" default={false}>
+  Include disabled repositories
+</ParamField>
+
+<ParamField path="limits.perRepoTop" type="number">
+  Maximum results per repository
+</ParamField>
+
+<ParamField path="limits.concurrency" type="number">
+  Maximum concurrent repository searches
+</ParamField>
+
+<ParamField path="merge.strategy" type="string" default="rrf">
+  Result merging strategy (currently only `rrf` supported)
+</ParamField>
+
+<ParamField path="merge.rrfK" type="number">
+  RRF (Reciprocal Rank Fusion) K parameter
+</ParamField>
+
+<ParamField path="cohort" type="string | string[]">
+  Cohort filter for result mixing
+</ParamField>
+
+<ParamField path="cohorts.policy" type="string">
+  Cohort policy: `default` or `strict`
+</ParamField>
+
+---
+
+## triage_ingest
+
+Ingest vulnerability findings into triage records.
+
+### Parameters
+
+<ParamField path="source" type="string" required>
+  Finding source: `dependabot`, `aws_inspector`, `generic`, or `manual`
+</ParamField>
+
+<ParamField path="inputPath" type="string" required>
+  Input JSON/JSONL file path
+</ParamField>
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="meta" type="object">
+  Routing metadata (service, environment, team, owner, etc.)
+</ParamField>
+
+<ParamField path="buildIndex" type="boolean" default={false}>
+  Build the records index after ingest
+</ParamField>
+
+<ParamField path="incremental" type="boolean" default={false}>
+  Use incremental indexing if enabled
+</ParamField>
+
+<ParamField path="stubEmbeddings" type="boolean" default={false}>
+  Use stub embeddings for indexing
+</ParamField>
+
+---
+
+## triage_decision
+
+Create a triage decision record linked to a finding.
+
+### Parameters
+
+<ParamField path="finding" type="string" required>
+  Finding record ID
+</ParamField>
+
+<ParamField path="status" type="string" required>
+  Decision status: `fix`, `accept`, `defer`, `false_positive`, or `not_affected`
+</ParamField>
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="justification" type="string">
+  Decision justification text
+</ParamField>
+
+<ParamField path="reviewer" type="string">
+  Reviewer name or identifier
+</ParamField>
+
+<ParamField path="expires" type="string">
+  ISO date string for decision expiry
+</ParamField>
+
+<ParamField path="codes" type="string[]">
+  Justification codes
+</ParamField>
+
+<ParamField path="evidence" type="string[]">
+  Evidence references
+</ParamField>
+
+<ParamField path="meta" type="object">
+  Additional routing metadata
+</ParamField>
+
+---
+
+## triage_context_pack
+
+Generate a triage context pack with evidence for a finding.
+
+### Parameters
+
+<ParamField path="recordId" type="string" required>
+  Finding record ID
+</ParamField>
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="outPath" type="string">
+  Output file path for context pack
+</ParamField>
+
+<ParamField path="ann" type="boolean">
+  Enable ANN search for evidence gathering
+</ParamField>
+
+<ParamField path="stubEmbeddings" type="boolean" default={false}>
+  Use stub embeddings for evidence search
+</ParamField>
+
+---
+
+## download_models
+
+Download embedding models into the shared cache.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="model" type="string" default="Xenova/all-MiniLM-L12-v2">
+  Model identifier from Hugging Face
+</ParamField>
+
+<ParamField path="cacheDir" type="string">
+  Override cache directory
+</ParamField>
+
+<Note>
+This is a long-running tool that emits progress notifications during download.
+</Note>
+
+---
+
+## download_dictionaries
+
+Download dictionary wordlists into the shared cache.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="lang" type="string">
+  Comma-separated language codes (e.g., `en`, `en,es`)
+</ParamField>
+
+<ParamField path="url" type="string">
+  Extra source URL(s) in format `name=url` (repeatable)
+</ParamField>
+
+<ParamField path="dir" type="string">
+  Override dictionary directory
+</ParamField>
+
+<ParamField path="update" type="boolean" default={false}>
+  Check for updates using If-Modified-Since
+</ParamField>
+
+<ParamField path="force" type="boolean" default={false}>
+  Force re-downloads
+</ParamField>
+
+---
+
+## download_extensions
+
+Download SQLite ANN extensions into the cache.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="provider" type="string">
+  Extension provider (e.g., `sqlite-vec`)
+</ParamField>
+
+<ParamField path="platform" type="string">
+  Override platform detection
+</ParamField>
+
+<ParamField path="arch" type="string">
+  Override architecture detection
+</ParamField>
+
+<ParamField path="url" type="string">
+  Override download URL(s) in format `name=url` (repeatable)
+</ParamField>
+
+<ParamField path="dir" type="string">
+  Override extension directory
+</ParamField>
+
+<ParamField path="out" type="string">
+  Explicit output path
+</ParamField>
+
+<ParamField path="update" type="boolean" default={false}>
+  Check for updates using If-Modified-Since
+</ParamField>
+
+<ParamField path="force" type="boolean" default={false}>
+  Force re-downloads
+</ParamField>
+
+---
+
+## verify_extensions
+
+Verify SQLite ANN extension availability and optionally test loading.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="provider" type="string">
+  Extension provider to verify
+</ParamField>
+
+<ParamField path="path" type="string">
+  Explicit extension path
+</ParamField>
+
+<ParamField path="dir" type="string">
+  Extension directory
+</ParamField>
+
+<ParamField path="platform" type="string">
+  Platform override
+</ParamField>
+
+<ParamField path="arch" type="string">
+  Architecture override
+</ParamField>
+
+<ParamField path="load" type="boolean" default={true}>
+  Attempt to load the extension (default true)
+</ParamField>
+
+<ParamField path="module" type="string">
+  Module name for verification
+</ParamField>
+
+<ParamField path="table" type="string">
+  Table name for verification
+</ParamField>
+
+<ParamField path="column" type="string">
+  Column name for verification
+</ParamField>
+
+<ParamField path="encoding" type="string">
+  Encoding for verification
+</ParamField>
+
+<ParamField path="options" type="string">
+  Additional options
+</ParamField>
+
+<ParamField path="annMode" type="string">
+  ANN mode for verification
+</ParamField>
+
+---
+
+## cache_gc
+
+Garbage-collect repository caches based on size and age policies.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="dryRun" type="boolean" default={false}>
+  Preview changes without deleting files
+</ParamField>
+
+<ParamField path="maxBytes" type="number">
+  Maximum cache size in bytes
+</ParamField>
+
+<ParamField path="maxGb" type="number">
+  Maximum cache size in gigabytes
+</ParamField>
+
+<ParamField path="maxAgeDays" type="number">
+  Maximum age in days for cached items
+</ParamField>
+
+---
+
+## clean_artifacts
+
+Remove repository cache artifacts.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="all" type="boolean" default={false}>
+  Clean artifacts for all repositories
+</ParamField>
+
+<ParamField path="dryRun" type="boolean" default={false}>
+  Preview changes without deleting files
+</ParamField>
+
+---
+
+## bootstrap
+
+Bootstrap complete setup: models, dictionaries, tooling, and indexes.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+<ParamField path="skipInstall" type="boolean" default={false}>
+  Skip npm install step
+</ParamField>
+
+<ParamField path="skipDicts" type="boolean" default={false}>
+  Skip dictionary downloads
+</ParamField>
+
+<ParamField path="skipIndex" type="boolean" default={false}>
+  Skip index building
+</ParamField>
+
+<ParamField path="skipArtifacts" type="boolean" default={false}>
+  Skip artifact restoration
+</ParamField>
+
+<ParamField path="skipTooling" type="boolean" default={false}>
+  Skip tooling setup
+</ParamField>
+
+<ParamField path="withSqlite" type="boolean" default={false}>
+  Include SQLite index building
+</ParamField>
+
+<ParamField path="incremental" type="boolean" default={false}>
+  Use incremental indexing
+</ParamField>
+
+<Note>
+Bootstrap is a comprehensive long-running operation that emits progress notifications throughout.
+</Note>
+
+---
+
+## report_artifacts
+
+Report current artifact sizes for the repository and cache root.
+
+### Parameters
+
+<ParamField path="repoPath" type="string">
+  Repository path (defaults to server cwd)
+</ParamField>
+
+### Response
+
+Returns the same status payload as [index_status](#index_status), including artifact locations and sizes.

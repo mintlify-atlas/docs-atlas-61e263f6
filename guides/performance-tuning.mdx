@@ -1,0 +1,446 @@
+---
+title: Performance tuning
+description: Optimize indexing and search performance for your repository
+---
+
+PairOfCleats provides extensive tuning options for both build and retrieval pipelines. This guide covers key performance optimizations.
+
+## Build performance
+
+### Concurrency and threading
+
+Control parallel processing with thread pools:
+
+```bash
+pairofcleats index build --threads 8 --concurrency 4
+```
+
+<ParamField path="--threads" type="number" default="auto">
+  Thread pool size for CPU-intensive tasks (tree-sitter parsing, embeddings)
+</ParamField>
+
+<ParamField path="--concurrency" type="number" default="auto">
+  I/O concurrency for file reads and artifact writes
+</ParamField>
+
+<Tip>
+**Auto-tuning**: When set to `auto`, PairOfCleats selects optimal values based on available CPU cores and system memory.
+</Tip>
+
+### Scheduler modes
+
+Choose a scheduler based on your workload:
+
+<Tabs>
+  <Tab title="Striped (default)">
+    ```bash
+    pairofcleats index build --scheduler striped
+    ```
+    
+    Balanced approach with predictable resource usage. Good for most repositories.
+  </Tab>
+  
+  <Tab title="Greedy">
+    ```bash
+    pairofcleats index build --scheduler greedy
+    ```
+    
+    Maximizes throughput by saturating all workers. Best for large repositories with abundant system resources.
+  </Tab>
+  
+  <Tab title="Adaptive">
+    ```bash
+    pairofcleats index build --scheduler adaptive
+    ```
+    
+    Dynamically adjusts based on load. Experimental feature for varying workloads.
+  </Tab>
+</Tabs>
+
+### Quality vs speed tradeoffs
+
+Control indexing depth and analysis:
+
+```bash
+pairofcleats index build --quality balanced
+```
+
+<ParamField path="--quality" type="string" default="balanced">
+  Quality preset: `minimal`, `balanced`, or `deep`
+</ParamField>
+
+**Quality presets:**
+
+- **minimal** - Skip embeddings, relations, and tree-sitter analysis. Fastest build.
+- **balanced** - Enable basic embeddings and relations. Good speed/quality tradeoff.
+- **deep** - Full analysis with all enrichment stages. Best search quality.
+
+### Skip stages
+
+Selectively disable expensive stages:
+
+```bash
+pairofcleats index build --skip-embeddings --skip-relations
+```
+
+Available skip flags:
+- `--skip-embeddings` - Disable vector embeddings (sparse search only)
+- `--skip-relations` - Skip import graph and symbol relations
+- `--skip-extracted-prose` - Skip document extraction (PDF/DOCX)
+
+<Warning>
+Skipping stages reduces search capabilities. Only use for testing or constrained environments.
+</Warning>
+
+### Incremental builds
+
+Avoid full rebuilds by using incremental mode:
+
+```bash
+pairofcleats index build --incremental
+```
+
+Incremental builds:
+- Detect file changes via git or mtime
+- Reuse unchanged artifacts
+- Update only modified files
+- Typically 5-10x faster than full builds
+
+<Info>
+Incremental builds require `--scm-provider git` (enabled by default).
+</Info>
+
+### SQLite optimization
+
+Optimize SQLite database performance:
+
+```bash
+pairofcleats index build --sqlite-wal --sqlite-bulk-insert
+```
+
+<ParamField path="--sqlite-wal" type="boolean" default="true">
+  Enable Write-Ahead Logging for better concurrency
+</ParamField>
+
+<ParamField path="--sqlite-bulk-insert" type="boolean" default="true">
+  Use bulk transactions for faster inserts
+</ParamField>
+
+<ParamField path="--sqlite-vacuum" type="boolean" default="false">
+  Run VACUUM after build to reclaim space
+</ParamField>
+
+### Memory management
+
+Control memory usage for large repositories:
+
+```json
+{
+  "runtime": {
+    "maxMemoryMb": 8192,
+    "chunkStreamBufferSize": 5000,
+    "tokenPostingsBufferSize": 10000
+  }
+}
+```
+
+<Tip>
+Monitor memory usage during builds with `--log-memory`.
+</Tip>
+
+## Search performance
+
+### Backend selection
+
+Choose the optimal search backend:
+
+```bash
+pairofcleats search --backend auto -- "query"
+```
+
+<Tabs>
+  <Tab title="SQLite (default)">
+    ```bash
+    pairofcleats search --backend sqlite -- "query"
+    ```
+    
+    Best all-around performance. Uses BM25 + sqlite-vec for ANN.
+  </Tab>
+  
+  <Tab title="SQLite FTS5">
+    ```bash
+    pairofcleats search --backend sqlite-fts -- "query"
+    ```
+    
+    Optimized for phrase queries and complex boolean logic.
+  </Tab>
+  
+  <Tab title="LMDB">
+    ```bash
+    pairofcleats search --backend lmdb -- "query"
+    ```
+    
+    Fastest for simple term lookups. Lower latency than SQLite.
+  </Tab>
+</Tabs>
+
+### ANN providers
+
+Select vector search provider:
+
+```bash
+pairofcleats search --ann auto -- "semantic query"
+```
+
+Available providers:
+- **sqlite-vec** - Best compatibility, good performance
+- **lancedb** - Highest quality, slower startup
+- **hnsw** - Fastest queries, requires prebuild
+- **lmdb-ann** - Lowest latency for small indexes
+
+<Info>
+Run `pairofcleats setup` to download sqlite-vec extension.
+</Info>
+
+### Query optimization
+
+#### Limit result count
+
+```bash
+pairofcleats search --max-results 20 -- "query"
+```
+
+Lower max-results reduces ranking overhead.
+
+#### Use mode filters
+
+```bash
+pairofcleats search --mode code -- "function"
+```
+
+Searching specific modes (code, prose, records) is faster than `--mode all`.
+
+#### Prefilter with path patterns
+
+```bash
+pairofcleats search --path "src/**/*.ts" -- "query"
+```
+
+Path filters use chargram index for fast candidate prefiltering.
+
+#### Disable expensive features
+
+```bash
+pairofcleats search --no-ann --no-explain -- "query"
+```
+
+- `--no-ann` - Skip vector search (sparse only)
+- `--no-explain` - Disable score breakdown
+- `--no-stats` - Skip pipeline statistics
+
+### Caching strategies
+
+#### Query result cache
+
+Enable in-memory result caching:
+
+```json
+{
+  "search": {
+    "resultCache": {
+      "enabled": true,
+      "maxEntries": 1000,
+      "ttlSeconds": 300
+    }
+  }
+}
+```
+
+#### Graph artifact cache
+
+Cache graph structures for context expansion:
+
+```json
+{
+  "retrieval": {
+    "graphCache": {
+      "maxEntries": 50,
+      "includeCsr": true
+    }
+  }
+}
+```
+
+## Benchmarking
+
+### Index build benchmarks
+
+Measure indexing performance:
+
+```bash
+node tools/bench/index/build-state-write.js --mode compare
+node tools/bench/index/chunk-meta-stream.js --mode compare
+node tools/bench/index/graph-relations.js --mode compare
+```
+
+### Retrieval benchmarks
+
+Measure search latency:
+
+```bash
+node tools/bench/query-generator.js --suite regression
+node tools/bench/retrieval-pipeline.js --index <path>
+```
+
+### Micro benchmarks
+
+Profile specific components:
+
+```bash
+node tools/bench/micro/run.js --suite core
+node tools/bench/micro/tinybench.js
+```
+
+<Tip>
+All benchmarks write to `.benchCache/` and support `--mode baseline`, `--mode current`, or `--mode compare`.
+</Tip>
+
+## Monitoring and profiling
+
+### Build statistics
+
+Enable detailed build metrics:
+
+```bash
+pairofcleats index build --stats --log-times
+```
+
+Outputs:
+- Per-stage timing
+- Memory checkpoints
+- Artifact sizes
+- Throughput metrics
+
+### Search statistics
+
+Profile search performance:
+
+```bash
+pairofcleats search --explain --stats -- "query"
+```
+
+**Stats output includes:**
+- Candidate generation time
+- Sparse ranking time
+- Dense ranking time
+- Fusion time
+- Total query latency
+
+### Memory profiling
+
+Track memory usage:
+
+```bash
+pairofcleats index build --log-memory --heap-snapshot-on-oom
+```
+
+<Warning>
+`--heap-snapshot-on-oom` writes snapshots to disk. Ensure adequate disk space.
+</Warning>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use incremental builds in CI">
+    Enable incremental mode to speed up CI pipeline:
+    
+    ```bash
+    pairofcleats index build --incremental --quality minimal
+    ```
+  </Accordion>
+  
+  <Accordion title="Tune concurrency for cloud instances">
+    Match concurrency to instance type:
+    
+    - **2 CPU**: `--threads 2 --concurrency 2`
+    - **4 CPU**: `--threads 4 --concurrency 4`
+    - **8+ CPU**: `--threads 8 --concurrency 6`
+  </Accordion>
+  
+  <Accordion title="Use LMDB for interactive search">
+    LMDB provides lowest latency for quick searches:
+    
+    ```bash
+    pairofcleats lmdb build
+    pairofcleats search --backend lmdb -- "query"
+    ```
+  </Accordion>
+  
+  <Accordion title="Enable WAL for concurrent access">
+    SQLite WAL mode allows concurrent readers:
+    
+    ```bash
+    pairofcleats index build --sqlite-wal
+    ```
+  </Accordion>
+  
+  <Accordion title="Compact SQLite periodically">
+    Reclaim space with periodic compaction:
+    
+    ```bash
+    pairofcleats compact-sqlite-index --repo .
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting performance issues
+
+### Slow builds
+
+**Symptom**: Builds take longer than expected
+
+**Solutions:**
+1. Check system resources with `--log-memory --stats`
+2. Reduce quality: `--quality minimal`
+3. Skip expensive stages: `--skip-embeddings`
+4. Increase concurrency: `--threads 8`
+5. Use incremental builds: `--incremental`
+
+### Slow searches
+
+**Symptom**: Search queries have high latency
+
+**Solutions:**
+1. Profile with `--explain --stats`
+2. Use mode filters: `--mode code`
+3. Reduce results: `--max-results 10`
+4. Try different backend: `--backend lmdb`
+5. Disable ANN: `--no-ann`
+
+### High memory usage
+
+**Symptom**: Builds or searches consume excessive memory
+
+**Solutions:**
+1. Lower buffer sizes in config:
+   ```json
+   {
+     "runtime": {
+       "chunkStreamBufferSize": 1000,
+       "tokenPostingsBufferSize": 2000
+     }
+   }
+   ```
+2. Reduce concurrency: `--concurrency 2`
+3. Build in stages: build code mode first, then prose
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/configuration/config-file">
+    Advanced configuration options
+  </Card>
+  <Card title="Cache management" icon="database" href="/configuration/cache-management">
+    Optimize cache usage
+  </Card>
+</CardGroup>

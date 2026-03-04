@@ -1,0 +1,351 @@
+---
+title: Cache Commands
+description: Manage cache storage and perform garbage collection
+---
+
+## pairofcleats cache clear
+
+Remove cache data safely.
+
+```bash
+pairofcleats cache clear [options]
+```
+
+### Description
+
+Clears PairOfCleats cache directories including:
+- Downloaded models
+- Intermediate build artifacts
+- Compiled indexes
+- Embeddings cache
+
+By default, clears only the current versioned cache. Use `--all` to clear legacy caches as well.
+
+### Options
+
+<ParamField path="--all" type="boolean" default="false">
+  Clear legacy cache entries as well as current version
+</ParamField>
+
+<ParamField path="--force" type="boolean" default="false">
+  Skip confirmation prompt
+</ParamField>
+
+<ParamField path="--cache-root" type="string">
+  Override cache root directory path
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Interactive Clear
+# Prompt for confirmation
+pairofcleats cache clear
+```
+
+```bash Force Clear
+# Skip confirmation
+pairofcleats cache clear --force
+```
+
+```bash Clear All
+# Clear current and legacy caches
+pairofcleats cache clear --all --force
+```
+
+```bash Custom Location
+# Clear specific cache directory
+pairofcleats cache clear --cache-root /custom/cache/path --force
+```
+
+</CodeGroup>
+
+### Interactive Prompt
+
+Without `--force`, you'll be prompted:
+
+```
+This will delete cache data under /home/user/.pairofcleats/cache/v1. Continue? (y/N)
+```
+
+Type `y` or `yes` to proceed, or `n`/`N`/Enter to abort.
+
+### Non-Interactive Mode
+
+In non-TTY environments (CI, scripts), you must use `--force`:
+
+```bash
+pairofcleats cache clear --force
+```
+
+Otherwise, the command will exit with an error.
+
+### Cache Structure
+
+Caches are versioned by tool version:
+
+```
+~/.pairofcleats/cache/
+├── v1/           # Current version cache
+│   ├── models/
+│   ├── repos/
+│   └── embeddings/
+└── v0/           # Legacy cache (--all)
+```
+
+### Safety
+
+- **Confirmation required** - Interactive prompt prevents accidents
+- **Version isolation** - Only clears specified version by default
+- **Rebuild required** - Indexes must be rebuilt after clearing
+
+<Warning>
+Clearing cache removes all downloaded models and built indexes. You'll need to run `pairofcleats setup` again to restore functionality.
+</Warning>
+
+---
+
+## pairofcleats cache gc
+
+Run cache garbage collection planner.
+
+```bash
+pairofcleats cache gc [options]
+```
+
+### Description
+
+Analyzes cache usage and plans deletions based on:
+- **Age** - Remove old artifacts beyond max age
+- **Size** - Enforce quota limits
+- **Access time** - Evict least-recently-used entries
+- **Grace period** - Protect recently accessed items
+
+By default, runs in dry-run mode showing planned deletions without executing them.
+
+### Modes
+
+<ParamField path="--apply" type="boolean" default="false">
+  Execute planned deletions (default is dry-run)
+</ParamField>
+
+<ParamField path="--dry-run" type="boolean" default="false">
+  Show planned deletions without executing (explicit dry-run)
+</ParamField>
+
+### Cache Options
+
+<ParamField path="--cache-root" type="string">
+  Override cache root directory
+</ParamField>
+
+<ParamField path="--repo" type="string">
+  Repository root (for repo-specific cache)
+</ParamField>
+
+### Policy Options
+
+<ParamField path="--grace-days" type="number">
+  Grace period in days (protects recently accessed items)
+</ParamField>
+
+<ParamField path="--max-age-days" type="number">
+  Maximum age in days for cache entries
+</ParamField>
+
+<ParamField path="--max-bytes" type="number">
+  Maximum cache size in bytes
+</ParamField>
+
+<ParamField path="--max-gb" type="number">
+  Maximum cache size in gigabytes (alternative to --max-bytes)
+</ParamField>
+
+### Limits
+
+<ParamField path="--max-deletes" type="number">
+  Maximum number of deletions to perform
+</ParamField>
+
+<ParamField path="--concurrency" type="number">
+  Concurrent deletion operations
+</ParamField>
+
+### Output
+
+<ParamField path="--json" type="boolean" default="false">
+  Output GC plan as JSON
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Dry Run
+# Preview planned deletions
+pairofcleats cache gc
+```
+
+```bash Execute GC
+# Actually delete planned items
+pairofcleats cache gc --apply
+```
+
+```bash Age-Based GC
+# Remove entries older than 30 days
+pairofcleats cache gc --max-age-days 30 --apply
+```
+
+```bash Size-Based GC
+# Enforce 10GB cache limit
+pairofcleats cache gc --max-gb 10 --apply
+```
+
+```bash With Grace Period
+# Protect items accessed in last 7 days
+pairofcleats cache gc --grace-days 7 --max-gb 5 --apply
+```
+
+```bash Limited Deletions
+# Delete at most 100 items
+pairofcleats cache gc --max-deletes 100 --apply
+```
+
+```bash JSON Output
+# Get structured GC plan
+pairofcleats cache gc --json
+```
+
+</CodeGroup>
+
+### GC Strategies
+
+#### Age-Based Eviction
+
+```bash
+# Remove entries older than 60 days
+pairofcleats cache gc --max-age-days 60 --apply
+```
+
+Use for:
+- Cleaning up stale artifacts
+- Enforcing retention policies
+- Compliance requirements
+
+#### Size-Based Eviction
+
+```bash
+# Keep cache under 20GB
+pairofcleats cache gc --max-gb 20 --grace-days 14 --apply
+```
+
+Use for:
+- Disk space management
+- Quota enforcement
+- Cost control
+
+#### Combined Strategy
+
+```bash
+# Age + size limits with grace period
+pairofcleats cache gc \
+  --max-age-days 90 \
+  --max-gb 15 \
+  --grace-days 7 \
+  --apply
+```
+
+### Output Format
+
+#### Console Output (Dry Run)
+
+```
+[cache-gc] Analyzing cache: /home/user/.pairofcleats/cache/v1
+[cache-gc] Total cache size: 12.3 GB
+[cache-gc] Planned deletions: 145 items (4.2 GB)
+
+Deletions by age:
+  - 67 items older than 60 days (2.1 GB)
+
+Deletions by size quota:
+  - 78 items to meet 10 GB limit (2.1 GB)
+
+Run with --apply to execute deletions.
+```
+
+#### JSON Output
+
+```json
+{
+  "cacheRoot": "/home/user/.pairofcleats/cache/v1",
+  "totalBytes": 13194139533,
+  "totalItems": 1247,
+  "plan": {
+    "deletions": 145,
+    "bytesReclaimed": 4509715660,
+    "items": [
+      {
+        "path": "repos/old-project/embeddings.lmdb",
+        "bytes": 104857600,
+        "age": 92,
+        "reason": "age"
+      }
+    ]
+  },
+  "dryRun": true
+}
+```
+
+### Cron Scheduling
+
+Automate cache GC with cron:
+
+```bash
+# Daily GC at 2am
+0 2 * * * /usr/local/bin/pairofcleats cache gc --max-gb 20 --apply
+```
+
+### CAS Design Gate
+
+PairOfCleats uses Content-Addressable Storage (CAS) for some caches. The GC command supports both CAS and legacy cache formats.
+
+### Default Policy
+
+When no limits specified, default policy applies:
+
+- Grace period: 7 days
+- No age limit
+- No size limit
+- Dry-run mode
+
+### Best Practices
+
+1. **Always dry-run first** - Preview deletions before applying
+2. **Use grace periods** - Protect recently used items
+3. **Combine strategies** - Use both age and size limits
+4. **Monitor regularly** - Check cache growth over time
+5. **Automate** - Schedule periodic GC runs
+
+### Troubleshooting
+
+#### No Deletions Planned
+
+```bash
+# Increase limits to trigger deletions
+pairofcleats cache gc --max-age-days 30 --max-gb 5
+```
+
+#### Too Many Deletions
+
+```bash
+# Limit deletion count
+pairofcleats cache gc --max-deletes 50 --apply
+```
+
+#### Performance Issues
+
+```bash
+# Increase concurrency
+pairofcleats cache gc --concurrency 8 --apply
+```

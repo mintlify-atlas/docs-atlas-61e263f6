@@ -1,0 +1,300 @@
+---
+title: Architecture
+description: PairOfCleats two-plane system, cache layout, and data flow
+---
+
+PairOfCleats is a **two-plane system** that separates deterministic index building from flexible query execution.
+
+## Core Principles
+
+- **Build plane**: Deterministic artifact production with strict contracts
+- **Retrieval plane**: Query planning, candidate generation, scoring, and output shaping
+- **Contract-first artifacts**: Manifest-first loading with schema validation
+- **Cache identity**: Repo identity → cache root → build root → per-mode index roots
+
+## High-Level Data Flow
+
+```text
+Repo files
+  → discovery + mode classification
+  → chunking + metadata + postings + relations
+  → artifact pieces + manifest + build_state
+  → optional sqlite/ann materialization
+  → builds/current.json promotion
+
+Query
+  → parse + plan + intent
+  → candidate prefilter
+  → sparse rank (BM25 / sqlite-fts)
+  → dense rank (ann providers)
+  → fusion + boosts + explain
+  → stable output (human or json)
+```
+
+## System Architecture
+
+PairOfCleats processes repositories through distinct stages, from configuration to query results.
+
+### Runtime + Config Resolution
+
+```mermaid
+graph TD
+  A["CLI args + env"] --> B["Load user config"]
+  B --> C["AutoPolicy derivation"]
+  C --> D["Runtime envelope"]
+  D --> E["Build plan (modes, caps, stages)"]
+  E --> F["Discovery"]
+```
+
+**Key components:**
+- User configuration from `.pairofcleats.json`
+- Policy normalization and capability resolution
+- Concurrency limits and feature detection
+
+**References:**
+- `docs/config/contract.md` - Configuration schema and validation
+- `docs/config/hard-cut.md` - Hard cutover policy
+- `docs/specs/runtime-envelope.md` - Runtime environment specification
+
+### Discovery and Classification
+
+```mermaid
+graph TD
+  A["Repo root"] --> B["Discovery + ignore rules"]
+  B --> C["Mode classification (code/prose/extracted-prose/records)"]
+  C --> D["Global seq assignment (immutable)"]
+  D --> E["Contiguous window planner"]
+  E --> F["Active window set (W0 commit, W1 compute prefetch)"]
+```
+
+Files are discovered, classified into modes, and assigned deterministic sequence numbers for pipeline processing.
+
+**References:**
+- `docs/contracts/indexing.md` - Indexing stages and mode semantics
+- `docs/guides/triage-records.md` - Records mode and triage workflow
+- `docs/specs/stage1-order-contiguous-runtime.md` - Sequencing invariants
+- `docs/specs/stage1-window-planner.md` - Window management
+
+### Foreground Build Pipeline
+
+```mermaid
+graph TD
+  A["Active windows"] --> B["Compute lane (parallel)"]
+  B --> C["Result envelopes by seq"]
+  C --> D["Commit lane (nextCommitSeq only)"]
+  D --> E["Contiguous commit micro-batches"]
+  E --> F["Sparse index (tokens + postings + chargrams)"]
+  F --> G["Filter index (path/lang/meta)"]
+```
+
+Chunks are extracted in parallel, then committed in sequence to build sparse indexes.
+
+**Key features:**
+- Parallel compute with sequential commits
+- Deterministic sequence ordering
+- Micro-batch writes for efficiency
+
+**References:**
+- `docs/contracts/indexing.md` - Artifact requirements
+- `docs/language/import-links.md` - Relation extraction
+- `docs/guides/search.md` - Search pipeline integration
+- `docs/specs/stage1-backpressure-controller.md` - Flow control
+
+### Artifacts and SQLite Build
+
+```mermaid
+graph TD
+  S["Sparse index"] --> G["Artifacts (chunk_meta, postings, bundles, filter index)"]
+  S --> H["SQLite build (WAL + bulk tx)"]
+  G --> I["Manifest + build_state"]
+  H --> I
+```
+
+Sparse indexes are materialized as JSON artifacts and optionally written to SQLite databases.
+
+**References:**
+- `docs/contracts/public-artifact-surface.md` - Public artifact schema
+- `docs/contracts/sqlite.md` - SQLite integration
+- `docs/sqlite/index-schema.md` - Database schema
+
+### Background Enrichment
+
+```mermaid
+graph TD
+  G["Artifacts"] --> Q["Enrichment queue"]
+  Q --> J["Tree-sitter + lint + risk + embeddings"]
+  J --> K["Enriched artifacts + vectors"]
+  K --> H["SQLite update (dense vectors, ANN tables)"]
+```
+
+After foreground indexing completes, background stages add semantic metadata and embeddings.
+
+**References:**
+- `docs/contracts/indexing.md` - Stage definitions
+- `docs/guides/embeddings.md` - Embedding generation
+- `docs/sqlite/ann-extension.md` - Vector search integration
+
+### Build Promotion
+
+```mermaid
+graph TD
+  A["Attempt build root"] --> B["Validate artifacts"]
+  B --> C{Valid?}
+  C -->|yes| D["Promote current.json"]
+  C -->|no| E["Keep previous current"]
+```
+
+Builds are validated before promotion, ensuring only complete indexes become active.
+
+**References:**
+- `docs/specs/watch-atomicity.md` - Atomic updates during watch mode
+- `docs/specs/build-state-integrity.md` - Build state validation
+
+## Query Pipeline
+
+The retrieval plane executes queries against promoted indexes.
+
+### Query Parsing and Filters
+
+```mermaid
+graph TD
+  Q["Query string"] --> P["Parse terms + phrases"]
+  P --> T["Tokenize by mode"]
+  T --> F["Filter plan (path/lang/meta/risk)"]
+  F --> C["Candidate prefilter (chargrams)"]
+```
+
+Queries are parsed, tokenized mode-specifically, and filtered using chargram-accelerated prefilters.
+
+**References:**
+- `docs/contracts/search-contract.md` - Query schema
+- `docs/guides/search.md` - Search behavior
+
+### Ranking and Fusion
+
+```mermaid
+graph TD
+  C["Candidate set"] --> S["Sparse rank (BM25 or sqlite-fts)"]
+  C --> D["Dense rank (ANN: sqlite-vector/hnsw/lancedb/js)"]
+  S --> M["Fusion (RRF or blend) + boosts"]
+  D --> M
+```
+
+Sparse and dense results are fused using Reciprocal Rank Fusion (RRF) or normalized blending.
+
+**References:**
+- `docs/contracts/retrieval-ranking.md` - Ranking algorithms
+- `docs/guides/search.md` - Fusion strategies
+- `docs/guides/embeddings.md` - Dense vector configuration
+
+### Output and Context
+
+```mermaid
+graph TD
+  M["Fused results"] --> X["Context expansion (imports/calls/related)"]
+  X --> O["Output shaping (human/JSON) + stats"]
+```
+
+Results are optionally expanded with related code and formatted for human or machine consumption.
+
+**References:**
+- `docs/contracts/search-contract.md` - Output schema
+- `docs/guides/search.md` - Context expansion configuration
+
+## Cache Layout
+
+PairOfCleats stores all index artifacts outside the repository in a deterministic cache structure.
+
+### Default Layout
+
+```text
+<cacheRoot>/repos/<repoId>/
+  builds/
+    <buildId>/
+      build_state.json
+      index-code/
+      index-prose/
+      index-extracted-prose/
+      index-records/
+      index-sqlite/
+      index-lmdb/
+    current.json
+  snapshots/
+    manifest.json
+    <snapshotId>/snapshot.json
+    <snapshotId>/frozen.json
+  diffs/
+    manifest.json
+    <diffId>/inputs.json
+    <diffId>/summary.json
+  incremental/
+    <mode>/files/
+  triage/
+    records/
+```
+
+**Build ID format:** `YYYYMMDDTHHMMSSZ_<scmHeadShort|noscm>_<configHash8>`
+
+**Repo ID:** Derived from SCM provider head (git commit, jj changeId) and repo path
+
+### Custom Cache Root
+
+Set a custom cache location in `.pairofcleats.json`:
+
+```json
+{
+  "cache": {
+    "root": "C:/absolute/path/to/cache"
+  }
+}
+```
+
+## Backend Selection
+
+PairOfCleats supports multiple storage backends for both sparse and dense retrieval.
+
+### Sparse Backend Choice
+
+```mermaid
+graph TD
+  A["Backend flag (--backend) or auto policy"] --> B{Backend available?}
+  B --> C["memory"]
+  B --> D["sqlite"]
+  B --> E["sqlite-fts"]
+  B --> F["lmdb"]
+  B --> G["tantivy"]
+```
+
+**Backends:**
+- **memory**: In-memory postings (fastest for small repos)
+- **sqlite**: SQLite BM25 tables
+- **sqlite-fts**: SQLite FTS5 full-text search
+- **lmdb**: LMDB key-value store
+- **tantivy**: Rust-based full-text search (planned)
+
+### ANN Backend Choice
+
+```mermaid
+graph TD
+  A["ANN enabled?"] --> B{Backend available?}
+  B --> C["sqlite-vector"]
+  B --> D["hnsw"]
+  B --> E["lancedb"]
+  B --> F["js fallback"]
+```
+
+**ANN providers:**
+- **sqlite-vector**: sqlite-vec extension (merged vectors only)
+- **hnsw**: In-memory HNSW index
+- **lancedb**: LanceDB vector database
+- **js**: Pure JavaScript brute-force (fallback)
+
+**References:**
+- `docs/contracts/search-cli.md` - Backend flags
+- `docs/contracts/sqlite.md` - SQLite integration
+- `docs/sqlite/ann-extension.md` - Vector extension
+- `docs/guides/external-backends.md` - Backend capabilities
+
+<Info>
+PairOfCleats automatically selects the best available backend based on capabilities and configuration. Use `--explain` to see which backends were chosen for a query.
+</Info>

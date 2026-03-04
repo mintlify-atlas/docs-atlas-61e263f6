@@ -1,0 +1,391 @@
+---
+title: Cache Management
+description: Understanding PairOfCleats cache structure, build layout, and garbage collection
+---
+
+PairOfCleats maintains a deterministic cache structure for index artifacts, embeddings, and build state. Understanding the cache layout is essential for troubleshooting, backup, and maintenance.
+
+## Cache Root Location
+
+### Default Locations
+
+The cache root defaults to platform-specific directories:
+
+- **Windows**: `%LOCALAPPDATA%\PairOfCleats\cache`
+- **macOS/Linux**: `~/.cache/pairofcleats`
+
+### Custom Cache Root
+
+You can override the cache root in three ways:
+
+**1. Configuration file** (`.pairofcleats.json`):
+
+```json
+{
+  "cache": {
+    "root": "C:/absolute/path/to/cache"
+  }
+}
+```
+
+**2. Environment variable**:
+
+```bash
+export PAIROFCLEATS_CACHE_ROOT="/custom/cache/path"
+```
+
+**3. CLI flag** (command-specific support):
+
+```bash
+pairofcleats index build --cache-root /custom/cache/path
+```
+
+<Note>
+The cache root must be an absolute path. Environment variables take precedence over configuration file settings.
+</Note>
+
+## Cache Directory Structure
+
+### Repository Cache Layout
+
+Each repository gets a dedicated cache directory identified by a deterministic `repoId`:
+
+```text
+<cacheRoot>/
+├── repos/
+│   └── <repoId>/
+│       ├── builds/
+│       │   ├── <buildId>/
+│       │   │   ├── index-code/
+│       │   │   ├── index-prose/
+│       │   │   ├── index-extracted-prose/
+│       │   │   ├── index-records/
+│       │   │   └── build_state.json
+│       │   └── current.json
+│       └── embeddings/
+├── cas/
+│   ├── objects/
+│   └── leases/
+└── global/
+    ├── models/
+    ├── dictionaries/
+    └── tooling/
+```
+
+### Per-Mode Index Directories
+
+Each build contains four mode-specific index directories:
+
+<ParamField path="index-code" type="directory">
+  Code artifacts: functions, classes, methods, and code chunks
+</ParamField>
+
+<ParamField path="index-prose" type="directory">
+  Documentation artifacts: markdown, text, and prose content
+</ParamField>
+
+<ParamField path="index-extracted-prose" type="directory">
+  Extracted documentation: docstrings, comments, and inline docs
+</ParamField>
+
+<ParamField path="index-records" type="directory">
+  Structured data: JSON, YAML, CSV, and record-based files
+</ParamField>
+
+### Build State Files
+
+<ParamField path="build_state.json" type="file">
+  Complete build metadata including:
+  - Build timestamp
+  - Configuration snapshot
+  - File counts and statistics
+  - Artifact manifest
+</ParamField>
+
+<ParamField path="current.json" type="file">
+  Pointer to the active build. Updated atomically after successful build validation.
+  
+  ```json
+  {
+    "buildId": "20260304-143022-abc123",
+    "promotedAt": "2026-03-04T14:30:45.123Z"
+  }
+  ```
+</ParamField>
+
+## Build Lifecycle
+
+### 1. Build Creation
+
+Each `pairofcleats index build` creates a new build directory with a unique `buildId`:
+
+```text
+<cacheRoot>/repos/<repoId>/builds/<buildId>/
+```
+
+The `buildId` format is `YYYYMMDD-HHMMSS-<hash>` for deterministic ordering.
+
+### 2. Artifact Generation
+
+During the build, artifacts are written to mode-specific directories:
+
+- **Chunk metadata**: `chunk_meta.jsonl` or `chunk_meta.json`
+- **Sparse postings**: Token and chargram postings for BM25 search
+- **Relations**: `file_relations.json`, symbol occurrences and edges
+- **Embeddings**: Vector representations for ANN search
+- **SQLite database**: Optional materialized index for fast queries
+
+### 3. Validation and Promotion
+
+After successful validation:
+
+1. Build passes integrity checks
+2. `builds/current.json` is updated atomically to point to the new build
+3. Previous builds remain available for rollback
+
+<Warning>
+Queries always use the build referenced by `current.json`. If validation fails, the previous build remains active.
+</Warning>
+
+## Content-Addressable Storage (CAS)
+
+### CAS Object Storage
+
+The CAS layer provides deduplication across repositories and builds:
+
+```text
+<cacheRoot>/cas/
+├── objects/
+│   └── <first2>/
+│       └── <next2>/
+│           └── <sha256>
+└── leases/
+    └── <objectHash>.json
+```
+
+### Object Identity
+
+Each object is identified by its SHA-256 content hash:
+
+- **Storage path**: `cas/objects/<first2>/<next2>/<sha256>`
+- **Metadata**: size, creation time, access time, ref count
+
+### Lease Protocol
+
+Active readers/writers create lease files to prevent premature deletion:
+
+```json
+{
+  "holder": "build-abc123",
+  "startedAt": "2026-03-04T14:30:22.456Z",
+  "ttlMs": 3600000
+}
+```
+
+## Global Cache
+
+Shared resources used across all repositories:
+
+<ParamField path="models/" type="directory">
+  Embedding models and language models
+</ParamField>
+
+<ParamField path="dictionaries/" type="directory">
+  Language-specific dictionaries and lexicons
+</ParamField>
+
+<ParamField path="tooling/" type="directory">
+  Language servers, linters, and analysis tools
+</ParamField>
+
+## Garbage Collection
+
+### Manual Cleanup
+
+Inspect cache usage:
+
+```bash
+pairofcleats cache info
+```
+
+Dry-run garbage collection:
+
+```bash
+pairofcleats cache gc --dry-run
+```
+
+Perform garbage collection:
+
+```bash
+pairofcleats cache gc
+```
+
+### GC Algorithm
+
+Garbage collection uses a mark-and-sweep approach:
+
+**Mark Phase:**
+1. Enumerate active manifests (`current.json`, snapshot manifests)
+2. Resolve reachable CAS objects
+3. Build mark set
+
+**Sweep Phase:**
+1. Identify unreachable objects older than grace period
+2. Skip objects with active leases
+3. Delete in deterministic order (oldest access time first)
+
+<Note>
+GC only operates within `<cacheRoot>`. It never deletes files outside the cache directory.
+</Note>
+
+### Retention Policies
+
+Configure retention in `.pairofcleats.json`:
+
+```json
+{
+  "indexing": {
+    "snapshots": {
+      "keepPointer": 10,
+      "keepFrozen": 5,
+      "maxAgeDays": 30,
+      "protectedTagGlobs": ["release-*", "v*"]
+    },
+    "diffs": {
+      "keep": 20,
+      "maxAgeDays": 14
+    },
+    "embeddings": {
+      "cache": {
+        "maxGb": 10,
+        "maxAgeDays": 60
+      }
+    }
+  }
+}
+```
+
+### Safety Guarantees
+
+<Check>
+GC is designed to be safe by default:
+- Active leases prevent deletion
+- Grace period protects recent objects
+- Dry-run mode previews deletions
+- Deterministic ordering for reproducibility
+</Check>
+
+## Cache Isolation
+
+### Namespace Separation
+
+Use cache namespaces for isolated builds:
+
+```bash
+export PAIROFCLEATS_CACHE_NAMESPACE="experiment-1"
+pairofcleats index build
+```
+
+This creates a separate cache tree:
+
+```text
+<cacheRoot>/namespaces/experiment-1/repos/...
+```
+
+### Per-Repository Isolation
+
+Each repository is isolated by its `repoId`, computed from:
+- Repository root path (canonical)
+- Git remote URL (if available)
+- Workspace configuration (if applicable)
+
+## Maintenance Commands
+
+### Cache Information
+
+```bash
+# Show cache summary
+pairofcleats cache info
+
+# Show detailed breakdown
+pairofcleats cache info --verbose
+
+# JSON output
+pairofcleats cache info --json
+```
+
+### Cache Validation
+
+```bash
+# Validate cache integrity
+pairofcleats cache validate
+
+# Repair corrupted builds
+pairofcleats cache validate --repair
+```
+
+### Build Management
+
+```bash
+# List all builds
+pairofcleats index list
+
+# Remove specific build
+pairofcleats index remove <buildId>
+
+# Clean old builds (keeps recent N)
+pairofcleats index clean --keep 5
+```
+
+## Troubleshooting
+
+### Cache Not Found
+
+If queries fail with "no index found":
+
+1. Check `current.json` exists:
+   ```bash
+   cat <cacheRoot>/repos/<repoId>/builds/current.json
+   ```
+
+2. Verify build directory exists:
+   ```bash
+   ls <cacheRoot>/repos/<repoId>/builds/<buildId>/
+   ```
+
+3. Rebuild index:
+   ```bash
+   pairofcleats index build --mode all
+   ```
+
+### Cache Corruption
+
+If build artifacts are corrupted:
+
+```bash
+# Validate and repair
+pairofcleats cache validate --repair
+
+# Or force rebuild
+pairofcleats index build --cache-rebuild
+```
+
+### Disk Space Issues
+
+If cache grows too large:
+
+```bash
+# Check cache size
+pairofcleats cache info
+
+# Run garbage collection
+pairofcleats cache gc
+
+# Remove old builds
+pairofcleats index clean --keep 3
+```
+
+## Related
+
+- [Configuration File](/configuration/config-file) - Cache root configuration
+- [Environment Variables](/configuration/environment-variables) - Cache-related environment variables

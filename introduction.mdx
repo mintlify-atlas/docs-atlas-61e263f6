@@ -1,0 +1,110 @@
+---
+title: Introduction to PairOfCleats
+description: Local-first hybrid semantic indexing and search for source repositories with deterministic artifact production and mixed sparse + dense retrieval.
+---
+
+# Introduction to PairOfCleats
+
+PairOfCleats is a hybrid semantic indexing and search utility built for source repositories. It combines deterministic artifact production with mixed sparse + dense retrieval to provide powerful code and documentation search capabilities.
+
+## What is PairOfCleats?
+
+PairOfCleats builds deterministic index artifacts for code and prose, then runs mixed sparse + dense retrieval with strict contracts around artifacts, schemas, and cache identity. It's designed as a local-first tool that gives you complete control over your search infrastructure.
+
+### Two-plane architecture
+
+PairOfCleats operates on two distinct planes:
+
+- **Build plane**: Deterministic artifact production with contract-first artifacts and manifest-first loading
+- **Retrieval plane**: Query planning, candidate generation, scoring, and output shaping with hybrid ranking
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Hybrid search" icon="magnifying-glass">
+    Combines sparse ranking (BM25/SQLite-FTS) with dense ranking (ANN providers) for superior results
+  </Card>
+  
+  <Card title="Multi-mode indexing" icon="layer-group">
+    Indexes code, prose, extracted documents, and structured records with mode-specific optimization
+  </Card>
+  
+  <Card title="Deterministic builds" icon="lock">
+    Contract-first artifacts with manifest-driven loading ensure reproducible indexes
+  </Card>
+  
+  <Card title="Local-first" icon="server">
+    Full control over cache layout and artifacts - no external dependencies required
+  </Card>
+  
+  <Card title="Advanced backends" icon="database">
+    Support for SQLite-vec, LMDB, LanceDB, and HNSW for flexible performance tuning
+  </Card>
+  
+  <Card title="Rich integrations" icon="plug">
+    HTTP API server, MCP server mode, and editor integrations for seamless workflows
+  </Card>
+</CardGroup>
+
+## How it works
+
+### Build pipeline
+
+```text
+Repo files
+  -> discovery + mode classification
+  -> chunking + metadata + postings + relations
+  -> artifact pieces + manifest + build_state
+  -> optional sqlite/ann materialization
+  -> builds/current.json promotion
+```
+
+The build process starts with file discovery and mode classification, then performs chunking and metadata extraction. Sparse and dense artifacts are written with manifest entries, followed by optional database materialization.
+
+### Retrieval pipeline
+
+```text
+Query
+  -> parse + plan + intent
+  -> candidate prefilter
+  -> sparse rank (BM25 / sqlite-fts)
+  -> dense rank (ann providers)
+  -> fusion + boosts + explain
+  -> stable output (human or json)
+```
+
+Queries are parsed and planned, then candidates are generated through prefiltering. Both sparse and dense ranking are performed, with results fused using RRF or blend policies for optimal relevance.
+
+## Index modes
+
+PairOfCleats supports four specialized index modes:
+
+- **code**: Source code files with syntax-aware chunking and tree-sitter parsing
+- **prose**: Documentation, markdown, and plain text with semantic chunking
+- **extracted-prose**: Content extracted from PDFs, DOCX, and other document formats
+- **records**: Structured data from external symbol systems (ctags, LSIF, SCIP)
+
+## Getting started
+
+<CardGroup cols={3}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Get up and running in minutes with the guided setup
+  </Card>
+  
+  <Card title="CLI commands" icon="terminal" href="/cli/overview">
+    Explore all available commands and options
+  </Card>
+  
+  <Card title="API reference" icon="code" href="/api/overview">
+    Integrate PairOfCleats via HTTP API or MCP server
+  </Card>
+</CardGroup>
+
+## Use cases
+
+- **Semantic code search**: Find code by intent, not just keywords
+- **Documentation exploration**: Navigate large documentation sets efficiently
+- **Impact analysis**: Understand code relationships through graph traversal
+- **Editor integration**: Search directly from your development environment
+- **CI/CD integration**: Automated test selection and architecture validation
+- **AI context building**: Generate rich context packs for LLM consumption

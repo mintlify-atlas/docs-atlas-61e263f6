@@ -1,0 +1,457 @@
+---
+title: Configuration File
+description: Complete reference for the .pairofcleats.json configuration file structure and options
+---
+
+PairOfCleats uses a `.pairofcleats.json` file in your repository root to configure build, indexing, retrieval, and runtime behavior.
+
+## File Location
+
+Place `.pairofcleats.json` in the root of your repository:
+
+```text
+my-repo/
+├── .pairofcleats.json
+├── src/
+└── ...
+```
+
+## Schema
+
+The configuration file follows JSON Schema Draft 2020-12. The full schema is available at `docs/config/schema.json` in the source repository.
+
+## Example Configuration
+
+Minimal example:
+
+```json
+{}
+```
+
+PairOfCleats works with an empty configuration file using intelligent defaults.
+
+## Top-Level Namespaces
+
+<ParamField path="cache" type="object">
+  Cache root and storage configuration
+  
+  <ParamField path="cache.root" type="string">
+    Absolute path to cache directory. If not specified, uses platform-specific defaults:
+    - Windows: `%LOCALAPPDATA%\PairOfCleats\cache`
+    - macOS/Linux: `~/.cache/pairofcleats`
+    
+    Example:
+    ```json
+    {
+      "cache": {
+        "root": "C:/absolute/path/to/cache"
+      }
+    }
+    ```
+  </ParamField>
+</ParamField>
+
+<ParamField path="quality" type="string" default="auto">
+  Build quality preset. Controls trade-offs between speed and completeness.
+  
+  Options:
+  - `auto` - Automatic selection based on repository size
+  - `fast` - Minimal indexing for quick builds
+  - `balanced` - Recommended for most repositories
+  - `max` - Complete indexing with all features enabled
+</ParamField>
+
+<ParamField path="threads" type="number">
+  Number of worker threads for parallel operations. Defaults to available CPU cores.
+</ParamField>
+
+## Runtime Configuration
+
+<ParamField path="runtime" type="object">
+  Node.js runtime tuning options
+  
+  <ParamField path="runtime.uvThreadpoolSize" type="number">
+    UV_THREADPOOL_SIZE override for libuv operations
+  </ParamField>
+  
+  <ParamField path="runtime.maxOldSpaceMb" type="number">
+    Node.js old-space heap size limit in megabytes
+  </ParamField>
+  
+  <ParamField path="runtime.nodeOptions" type="string">
+    Additional Node.js command-line options
+  </ParamField>
+  
+  <ParamField path="runtime.ioOversubscribe" type="boolean">
+    Allow I/O operations to exceed CPU core count
+  </ParamField>
+</ParamField>
+
+## Tooling Configuration
+
+<ParamField path="tooling" type="object">
+  Language server and tooling integration settings
+  
+  <ParamField path="tooling.dir" type="string">
+    Directory for tooling installations
+  </ParamField>
+  
+  <ParamField path="tooling.autoInstallOnDetect" type="boolean">
+    Automatically install detected language tools
+  </ParamField>
+  
+  <ParamField path="tooling.autoEnableOnDetect" type="boolean">
+    Automatically enable detected language tools
+  </ParamField>
+  
+  <ParamField path="tooling.installScope" type="string">
+    Scope for tool installations (local, global, or user)
+  </ParamField>
+  
+  <ParamField path="tooling.allowGlobalFallback" type="boolean">
+    Allow using globally installed tools as fallback
+  </ParamField>
+  
+  <ParamField path="tooling.strict" type="boolean">
+    Fail builds when required tools are missing
+  </ParamField>
+  
+  <ParamField path="tooling.timeoutMs" type="number">
+    Default timeout for tool operations in milliseconds
+  </ParamField>
+  
+  <ParamField path="tooling.maxRetries" type="number">
+    Maximum retry attempts for failed tool operations
+  </ParamField>
+  
+  <ParamField path="tooling.circuitBreakerThreshold" type="number">
+    Failure threshold for circuit breaker
+  </ParamField>
+  
+  <ParamField path="tooling.logDir" type="string">
+    Directory for tool operation logs
+  </ParamField>
+  
+  <ParamField path="tooling.enabledTools" type="string | string[]">
+    Whitelist of enabled tools
+  </ParamField>
+  
+  <ParamField path="tooling.disabledTools" type="string | string[]">
+    Blacklist of disabled tools
+  </ParamField>
+  
+  <ParamField path="tooling.providerOrder" type="string | string[]">
+    Priority order for tool providers
+  </ParamField>
+</ParamField>
+
+### Language-Specific Tooling
+
+<ParamField path="tooling.typescript" type="object">
+  TypeScript-specific configuration
+  
+  <ParamField path="tooling.typescript.enabled" type="boolean">
+    Enable TypeScript tooling
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.resolveOrder" type="string | string[]">
+    Module resolution priority order
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.useTsconfig" type="boolean">
+    Use tsconfig.json for configuration
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.tsconfigPath" type="string">
+    Path to tsconfig.json file
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.allowJs" type="boolean">
+    Allow JavaScript files
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.checkJs" type="boolean">
+    Type-check JavaScript files
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.includeJsx" type="boolean">
+    Include JSX/TSX files
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.maxFiles" type="number">
+    Maximum number of files to process
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.maxFileBytes" type="number">
+    Maximum file size in bytes
+  </ParamField>
+  
+  <ParamField path="tooling.typescript.maxProgramFiles" type="number">
+    Maximum files in TypeScript program
+  </ParamField>
+</ParamField>
+
+<ParamField path="tooling.clangd" type="object">
+  Clangd (C/C++) configuration
+  
+  <ParamField path="tooling.clangd.requireCompilationDatabase" type="boolean">
+    Require compile_commands.json
+  </ParamField>
+  
+  <ParamField path="tooling.clangd.compileCommandsDir" type="string">
+    Directory containing compile_commands.json
+  </ParamField>
+</ParamField>
+
+<ParamField path="tooling.pyright" type="object">
+  Pyright (Python) configuration. Accepts Pyright-specific options.
+</ParamField>
+
+<ParamField path="tooling.sourcekit" type="object">
+  SourceKit (Swift) configuration. Accepts SourceKit-specific options.
+</ParamField>
+
+## MCP Configuration
+
+<ParamField path="mcp" type="object">
+  Model Context Protocol server settings
+  
+  <ParamField path="mcp.mode" type="string" default="auto">
+    MCP server mode. Requires @modelcontextprotocol/sdk capability for `sdk` mode.
+    
+    Options:
+    - `legacy` - Legacy MCP protocol
+    - `sdk` - Modern SDK-based protocol
+    - `auto` - Automatic detection
+  </ParamField>
+  
+  <ParamField path="mcp.queueMax" type="number">
+    Maximum queued MCP requests
+  </ParamField>
+  
+  <ParamField path="mcp.maxBufferBytes" type="number">
+    Maximum buffer size for MCP messages in bytes
+  </ParamField>
+  
+  <ParamField path="mcp.toolTimeoutMs" type="number">
+    Default timeout for MCP tool calls in milliseconds
+  </ParamField>
+  
+  <ParamField path="mcp.toolTimeouts" type="object">
+    Per-tool timeout overrides (tool name -> timeout in milliseconds)
+  </ParamField>
+</ParamField>
+
+## Indexing Configuration
+
+<ParamField path="indexing" type="object">
+  Build and indexing behavior
+  
+  <ParamField path="indexing.profile" type="string" default="default">
+    Indexing profile
+    
+    Options:
+    - `default` - Full indexing with all features
+    - `vector_only` - Vector embeddings only
+  </ParamField>
+  
+  <ParamField path="indexing.concurrency" type="number">
+    Parallel file processing concurrency
+  </ParamField>
+  
+  <ParamField path="indexing.importConcurrency" type="number">
+    Import resolution concurrency
+  </ParamField>
+  
+  <ParamField path="indexing.ioConcurrencyCap" type="number">
+    I/O operation concurrency limit
+  </ParamField>
+  
+  <ParamField path="indexing.maxFileBytes" type="number">
+    Maximum file size to index in bytes
+  </ParamField>
+  
+  <ParamField path="indexing.maxFileLines" type="number">
+    Maximum file lines to index
+  </ParamField>
+</ParamField>
+
+### Embeddings
+
+<ParamField path="indexing.embeddings" type="object">
+  Vector embedding configuration
+  
+  <ParamField path="indexing.embeddings.concurrency" type="number">
+    Parallel embedding generation concurrency
+  </ParamField>
+  
+  <ParamField path="indexing.embeddings.provider" type="string">
+    Embedding provider (onnx, openai, etc.)
+  </ParamField>
+  
+  <ParamField path="indexing.embeddings.cache" type="object">
+    Embedding cache settings
+    
+    <ParamField path="indexing.embeddings.cache.scope" type="string" default="global">
+      Cache scope
+      
+      Options:
+      - `global` - Shared across all repositories
+      - `repo` - Per-repository cache
+      - `local` - Local to build
+    </ParamField>
+    
+    <ParamField path="indexing.embeddings.cache.dir" type="string">
+      Cache directory path
+    </ParamField>
+    
+    <ParamField path="indexing.embeddings.cache.maxGb" type="number">
+      Maximum cache size in gigabytes
+    </ParamField>
+    
+    <ParamField path="indexing.embeddings.cache.maxAgeDays" type="number">
+      Maximum cache entry age in days
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+### Snapshots and Retention
+
+<ParamField path="indexing.snapshots" type="object">
+  Snapshot retention policies
+  
+  <ParamField path="indexing.snapshots.keepPointer" type="number">
+    Number of pointer snapshots to retain
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.keepFrozen" type="number">
+    Number of frozen snapshots to retain
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.maxAgeDays" type="number">
+    Maximum snapshot age in days
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.protectedTagGlobs" type="string | string[]">
+    Glob patterns for protected snapshot tags
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.stagingMaxAgeHours" type="number">
+    Maximum age for staging snapshots in hours
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.maxPointerSnapshots" type="number">
+    Maximum number of pointer snapshots
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.maxFrozenSnapshots" type="number">
+    Maximum number of frozen snapshots
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.retainDays" type="number">
+    Days to retain snapshots
+  </ParamField>
+  
+  <ParamField path="indexing.snapshots.keepTags" type="string | string[]">
+    Tags to always retain
+  </ParamField>
+</ParamField>
+
+## Retrieval Configuration
+
+<ParamField path="retrieval" type="object">
+  Search and retrieval behavior
+  
+  <ParamField path="retrieval.annCandidateCap" type="number" default="20000">
+    Maximum ANN candidate documents
+  </ParamField>
+  
+  <ParamField path="retrieval.annCandidateMinDocCount" type="number" default="100">
+    Minimum documents for ANN search
+  </ParamField>
+  
+  <ParamField path="retrieval.annCandidateMaxDocCount" type="number" default="20000">
+    Maximum documents for ANN search
+  </ParamField>
+  
+  <ParamField path="retrieval.relationBoost" type="object">
+    Relation-based ranking boost
+    
+    <ParamField path="retrieval.relationBoost.enabled" type="boolean" default="false">
+      Enable relation boosting
+    </ParamField>
+    
+    <ParamField path="retrieval.relationBoost.perCall" type="number" default="0.25">
+      Boost per call relation
+    </ParamField>
+    
+    <ParamField path="retrieval.relationBoost.perUse" type="number" default="0.1">
+      Boost per usage relation
+    </ParamField>
+    
+    <ParamField path="retrieval.relationBoost.maxBoost" type="number" default="1.5">
+      Maximum total boost
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+## Search Configuration
+
+<ParamField path="search" type="object">
+  Search algorithm settings
+  
+  <ParamField path="search.annDefault" type="boolean">
+    Use ANN by default
+  </ParamField>
+  
+  <ParamField path="search.denseVectorMode" type="string">
+    Dense vector search mode
+    
+    Options:
+    - `merged` - Use merged vectors
+    - `code` - Code vectors only
+    - `doc` - Documentation vectors only
+    - `auto` - Automatic selection
+  </ParamField>
+  
+  <ParamField path="search.rrf" type="object">
+    Reciprocal Rank Fusion settings
+    
+    <ParamField path="search.rrf.enabled" type="boolean">
+      Enable RRF fusion
+    </ParamField>
+    
+    <ParamField path="search.rrf.k" type="number">
+      RRF k parameter
+    </ParamField>
+  </ParamField>
+  
+  <ParamField path="search.scoreBlend" type="object">
+    Score blending configuration
+    
+    <ParamField path="search.scoreBlend.enabled" type="boolean">
+      Enable score blending
+    </ParamField>
+    
+    <ParamField path="search.scoreBlend.sparseWeight" type="number">
+      Weight for sparse search scores
+    </ParamField>
+    
+    <ParamField path="search.scoreBlend.annWeight" type="number">
+      Weight for ANN search scores
+    </ParamField>
+  </ParamField>
+  
+  <ParamField path="search.fieldWeights" type="object">
+    Per-field scoring weights (field name -> weight)
+  </ParamField>
+  
+  <ParamField path="search.maxCandidates" type="number">
+    Maximum candidate results
+  </ParamField>
+</ParamField>
+
+## Related
+
+- [Environment Variables](/configuration/environment-variables) - Environment variable overrides
+- [Cache Management](/configuration/cache-management) - Cache structure and garbage collection

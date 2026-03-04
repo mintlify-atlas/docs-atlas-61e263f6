@@ -1,0 +1,519 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for PairOfCleats
+---
+
+This guide covers common issues and their solutions. For additional help, see the [GitHub issues](https://github.com/doublemover/PairOfCleats/issues).
+
+## Installation issues
+
+### Node.js version mismatch
+
+**Symptom**: Error during install or runtime
+
+```
+Error: PairOfCleats requires Node.js >=24.13.0
+```
+
+**Solution**: Install the correct Node.js version
+
+```bash
+# Check current version
+node --version
+
+# Install required version (using nvm)
+nvm install 24.13.0
+nvm use 24.13.0
+```
+
+### Native module build failures
+
+**Symptom**: Error building native dependencies
+
+```
+Error: Failed to build better-sqlite3
+```
+
+**Solution**: Install build tools and rebuild
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    xcode-select --install
+    npm run rebuild:native
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    ```bash
+    sudo apt-get install build-essential python3
+    npm run rebuild:native
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    ```powershell
+    npm install --global windows-build-tools
+    npm run rebuild:native
+    ```
+  </Tab>
+</Tabs>
+
+### Patch application failures
+
+**Symptom**: Patches fail to apply during install
+
+```
+Error: Failed to apply patch for package
+```
+
+**Solution**: Clean install with patches
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+npm run patch
+```
+
+<Warning>
+Production installs (`npm ci --omit=dev`) may fail when patches are required. Use `npm install` for source checkouts.
+</Warning>
+
+## Setup and bootstrap issues
+
+### Setup fails to detect tooling
+
+**Symptom**: Setup cannot find Python, TypeScript, or other tools
+
+```
+Warning: Python not found in PATH
+```
+
+**Solution**: Install missing tools or continue without them
+
+```bash
+# Check what's detected
+node tools/tooling/detect.js
+
+# Install missing tools
+# Python (optional)
+python3 --version
+
+# TypeScript (optional)
+npm install -g typescript
+
+# Re-run setup
+pairofcleats setup
+```
+
+<Info>
+Optional tools enhance indexing but aren't required for basic operation.
+</Info>
+
+### Model download failures
+
+**Symptom**: Embedding model downloads fail or timeout
+
+```
+Error: Failed to download model all-MiniLM-L6-v2
+```
+
+**Solution**: Manual download or skip embeddings
+
+```bash
+# Retry with increased timeout
+PAIROFCLEATS_DOWNLOAD_TIMEOUT_MS=300000 pairofcleats setup
+
+# Or skip model downloads
+pairofcleats bootstrap --skip-models
+
+# Download manually later
+node tools/download/models.js
+```
+
+### Extension verification fails
+
+**Symptom**: SQLite extensions not loading
+
+```
+Error: sqlite-vec extension not found
+```
+
+**Solution**: Download and verify extensions
+
+```bash
+# Download extensions
+node tools/download/extensions.js
+
+# Verify installation
+node tools/sqlite/verify-extensions.js
+
+# Manual repair
+npm run repair:native
+```
+
+## Indexing issues
+
+### Index build fails
+
+**Symptom**: Build crashes or exits with error
+
+```
+Error: ENOSPC: no space left on device
+```
+
+**Solution**: Check disk space and cache location
+
+```bash
+# Check available space
+df -h
+
+# Check cache location
+pairofcleats index build --dry-run
+
+# Use custom cache location
+pairofcleats index build --cache-root /path/with/space
+```
+
+### Out of memory during build
+
+**Symptom**: Process killed with OOM
+
+```
+Killed: JavaScript heap out of memory
+```
+
+**Solution**: Reduce memory usage
+
+```bash
+# Increase Node.js heap
+export NODE_OPTIONS="--max-old-space-size=8192"
+
+# Reduce concurrency
+pairofcleats index build --concurrency 2 --threads 2
+
+# Skip expensive stages
+pairofcleats index build --skip-embeddings --quality minimal
+```
+
+### Validation errors after build
+
+**Symptom**: `pairofcleats index validate` reports errors
+
+```
+Error: Missing required artifact: chunk_meta.jsonl
+```
+
+**Solution**: Rebuild affected mode
+
+```bash
+# Clean and rebuild
+pairofcleats cache clear --force
+pairofcleats index build --mode code
+
+# Validate again
+pairofcleats index validate
+```
+
+### Incremental builds not working
+
+**Symptom**: Incremental build rebuilds everything
+
+**Solution**: Check SCM configuration
+
+```bash
+# Verify git is detected
+pairofcleats index build --dry-run
+
+# Force git provider
+pairofcleats index build --scm-provider git --incremental
+
+# Check git is working
+git status
+```
+
+<Note>
+Incremental builds require a git repository with working tree.
+</Note>
+
+## Search issues
+
+### No results found
+
+**Symptom**: Search returns empty results
+
+```
+No results found for query: "function"
+```
+
+**Solution**: Check index status and query syntax
+
+```bash
+# Verify index exists
+pairofcleats index validate
+
+# Check what's indexed
+pairofcleats index stats --json
+
+# Try different mode
+pairofcleats search --mode all -- "function"
+
+# Use phrase search
+pairofcleats search -- '"exact phrase"'
+```
+
+### Search crashes or hangs
+
+**Symptom**: Search never completes
+
+**Solution**: Simplify query and check resources
+
+```bash
+# Add timeout
+timeout 30s pairofcleats search -- "query"
+
+# Disable expensive features
+pairofcleats search --no-ann --no-explain -- "query"
+
+# Check backend
+pairofcleats search --backend lmdb -- "query"
+```
+
+### Slow search performance
+
+**Symptom**: Queries take several seconds
+
+**Solution**: See [Performance tuning](/guides/performance-tuning)
+
+```bash
+# Profile the query
+pairofcleats search --explain --stats -- "query"
+
+# Try different backend
+pairofcleats search --backend lmdb -- "query"
+
+# Reduce result count
+pairofcleats search --max-results 10 -- "query"
+```
+
+## Service and API issues
+
+### API server won't start
+
+**Symptom**: Server exits immediately
+
+```
+Error: EADDRINUSE: address already in use
+```
+
+**Solution**: Change port or kill existing process
+
+```bash
+# Use different port
+pairofcleats service api --port 3001
+
+# Find and kill existing process
+lsof -i :3000
+kill <PID>
+```
+
+### Authentication failures
+
+**Symptom**: API returns 401 Unauthorized
+
+**Solution**: Configure authentication
+
+```bash
+# Generate token
+PAIROFCLEATS_API_TOKEN="your-secret-token"
+
+# Start server with auth
+pairofcleats service api --auth-token "$PAIROFCLEATS_API_TOKEN"
+
+# Test with curl
+curl -H "Authorization: Bearer your-secret-token" \
+  http://localhost:3000/status
+```
+
+### MCP server not responding
+
+**Symptom**: MCP clients can't connect
+
+**Solution**: Check transport mode and logs
+
+```bash
+# Try auto mode
+node tools/mcp/server.js --mcp-mode auto
+
+# Check SDK availability
+npm list @modelcontextprotocol/sdk
+
+# Use legacy mode
+node tools/mcp/server.js --mcp-mode legacy
+```
+
+## Cache and storage issues
+
+### Cache size growing unexpectedly
+
+**Symptom**: Cache directory consuming too much disk space
+
+**Solution**: Run garbage collection
+
+```bash
+# Check cache size
+du -sh ~/.pairofcleats/cache
+
+# Dry-run GC
+pairofcleats cache gc --dry-run
+
+# Run GC with size limit
+pairofcleats cache gc --apply --max-gb 10
+```
+
+### Corrupted cache artifacts
+
+**Symptom**: Validation errors or crashes loading index
+
+**Solution**: Clear cache and rebuild
+
+```bash
+# Clear cache
+pairofcleats cache clear --force
+
+# Rebuild index
+pairofcleats index build
+```
+
+<Warning>
+Cache clearing is destructive. You'll need to rebuild all indexes.
+</Warning>
+
+### Cannot write to cache
+
+**Symptom**: Permission denied errors
+
+```
+Error: EACCES: permission denied
+```
+
+**Solution**: Fix permissions or use different cache location
+
+```bash
+# Fix permissions
+chmod -R u+w ~/.pairofcleats/cache
+
+# Or use custom location
+pairofcleats index build --cache-root /tmp/pairofcleats-cache
+```
+
+## Error codes reference
+
+### Common error codes
+
+<AccordionGroup>
+  <Accordion title="INVALID_REQUEST">
+    **Cause**: Invalid CLI arguments or API parameters
+    
+    **Solution**: Check command syntax and flag names
+    
+    ```bash
+    pairofcleats --help
+    pairofcleats index --help
+    ```
+  </Accordion>
+  
+  <Accordion title="INDEX_NOT_FOUND">
+    **Cause**: No index exists for repository
+    
+    **Solution**: Build index first
+    
+    ```bash
+    pairofcleats index build
+    ```
+  </Accordion>
+  
+  <Accordion title="INTERNAL">
+    **Cause**: Unexpected internal error
+    
+    **Solution**: Check logs and report issue
+    
+    ```bash
+    # Enable debug logging
+    export PAIROFCLEATS_LOG_LEVEL=debug
+    pairofcleats index build
+    ```
+  </Accordion>
+  
+  <Accordion title="TIMEOUT">
+    **Cause**: Operation exceeded timeout
+    
+    **Solution**: Increase timeout or simplify operation
+    
+    ```json
+    {
+      "mcp": {
+        "toolTimeoutMs": 300000
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="QUEUE_OVERLOADED">
+    **Cause**: Too many concurrent requests (MCP)
+    
+    **Solution**: Increase queue size or retry later
+    
+    ```json
+    {
+      "mcp": {
+        "queueMax": 128
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Debug logging
+
+Enable debug output for troubleshooting:
+
+```bash
+# Set log level
+export PAIROFCLEATS_LOG_LEVEL=debug
+
+# Enable specific loggers
+export PAIROFCLEATS_DEBUG=indexing,search,sqlite
+
+# Run with verbose output
+pairofcleats index build --verbose
+```
+
+### Log locations
+
+Logs are written to:
+- **stdout/stderr** - Console output
+- **~/.pairofcleats/logs/** - Persistent logs (if configured)
+- **.testLogs/** - Test and benchmark logs
+
+## Getting help
+
+If you're still stuck:
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/doublemover/PairOfCleats/issues">
+    Report bugs and request features
+  </Card>
+  <Card title="Configuration reference" icon="book" href="/configuration/config-file">
+    Complete configuration options
+  </Card>
+</CardGroup>
+
+<Tip>
+When reporting issues, include:
+- PairOfCleats version (`pairofcleats --version`)
+- Node.js version (`node --version`)
+- Operating system
+- Full error message and stack trace
+- Minimal reproduction steps
+</Tip>

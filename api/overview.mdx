@@ -1,0 +1,235 @@
+---
+title: API Server Overview
+description: Run PairOfCleats as a local HTTP service for developer tooling and agent orchestration
+---
+
+## Overview
+
+The API server is a lightweight local HTTP JSON wrapper around the core search and status handlers. It's designed for local developer tooling and agent orchestration, not for public exposure.
+
+## Starting the Server
+
+Start the API server using the CLI:
+
+```bash
+pairofcleats service api
+```
+
+Or run directly:
+
+```bash
+node tools/api/server.js
+```
+
+### Server Options
+
+<ParamField path="--host" type="string" default="127.0.0.1">
+  Bind address for the server
+</ParamField>
+
+<ParamField path="--port" type="number" default="7345">
+  Port number (use `0` for an ephemeral port)
+</ParamField>
+
+<ParamField path="--repo" type="string">
+  Default repository root path (auto-detected if omitted)
+</ParamField>
+
+<ParamField path="--output" type="string" default="compact">
+  Default search output format: `compact`, `full`, or `json`
+</ParamField>
+
+<ParamField path="--json" type="boolean">
+  Emit a JSON startup line with `host`, `port`, and `baseUrl`
+</ParamField>
+
+<ParamField path="--quiet" type="boolean">
+  Suppress non-essential logs
+</ParamField>
+
+### Example Startup
+
+```bash
+pairofcleats service api --host 127.0.0.1 --port 7345 --json
+```
+
+With JSON output:
+```json
+{"ok":true,"host":"127.0.0.1","port":7345,"repo":"/path/to/repo","baseUrl":"http://127.0.0.1:7345"}
+```
+
+## Authentication
+
+The server enforces authentication based on the bind address:
+
+- **Localhost binding**: Auth is optional unless you provide a token
+- **Non-localhost binding**: Auth is required unless `--allow-unauthenticated` is set
+
+### Configuring Authentication
+
+Provide a bearer token via environment variable or CLI flag:
+
+```bash
+export PAIROFCLEATS_API_TOKEN=your-secret-token
+pairofcleats service api
+```
+
+Or:
+
+```bash
+pairofcleats service api --auth-token your-secret-token
+```
+
+### Making Authenticated Requests
+
+Include the token in the `Authorization` header:
+
+```bash
+curl http://127.0.0.1:7345/search \
+  -H "Authorization: Bearer your-secret-token" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"function","mode":"code"}'
+```
+
+<ParamField path="--auth-token" type="string">
+  Bearer token required for requests (or set `PAIROFCLEATS_API_TOKEN`)
+</ParamField>
+
+<ParamField path="--allow-unauthenticated" type="boolean">
+  Explicit opt-out to disable authentication
+</ParamField>
+
+<Warning>
+Only use `--allow-unauthenticated` in trusted environments. Never expose an unauthenticated server to public networks.
+</Warning>
+
+## CORS Configuration
+
+CORS is disabled by default. Enable it for specific origins or all origins:
+
+<ParamField path="--cors-allowed-origins" type="string">
+  Comma-separated allowlist of origins (e.g., `http://localhost:3000,http://localhost:8080`)
+</ParamField>
+
+<ParamField path="--cors-allow-any" type="boolean">
+  Explicit opt-in to allow any origin (unsafe)
+</ParamField>
+
+Example:
+```bash
+pairofcleats service api --cors-allowed-origins "http://localhost:3000,http://localhost:8080"
+```
+
+<Warning>
+Only use `--cors-allow-any` in development environments. Production deployments should use specific origin allowlists.
+</Warning>
+
+## Repository Access Control
+
+By default, the server only allows access to its configured default repository. Override this with an allowlist:
+
+<ParamField path="--allowed-repo-roots" type="string">
+  Comma-separated allowlist for `repoPath` overrides
+</ParamField>
+
+Example:
+```bash
+pairofcleats service api --allowed-repo-roots "/path/to/repo1,/path/to/repo2"
+```
+
+Clients can then specify which repository to query:
+```bash
+curl http://127.0.0.1:7345/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"function","repoPath":"/path/to/repo2"}'
+```
+
+## Request Body Limits
+
+<ParamField path="--max-body-bytes" type="number" default="1000000">
+  Maximum request body size in bytes (default 1,000,000)
+</ParamField>
+
+Example:
+```bash
+pairofcleats service api --max-body-bytes 5000000
+```
+
+## Metrics
+
+The server exposes Prometheus metrics at `/metrics`:
+
+```bash
+curl http://127.0.0.1:7345/metrics
+```
+
+Returns metrics in Prometheus format:
+```text
+# HELP pairofcleats_search_requests_total Total number of search requests
+# TYPE pairofcleats_search_requests_total counter
+pairofcleats_search_requests_total 42
+```
+
+## Graceful Shutdown
+
+The server handles `SIGINT` and `SIGTERM` signals gracefully:
+
+- Stops accepting new connections
+- Completes in-flight requests
+- Closes resources cleanly
+
+Press `Ctrl+C` to trigger shutdown:
+```
+[api] SIGINT received; shutting down...
+[api] shutdown complete.
+```
+
+## Security Considerations
+
+<Warning>
+- **Never expose the API server to public networks without proper authentication**
+- **Use specific CORS origin allowlists** instead of allowing all origins
+- **Restrict repository access** using `--allowed-repo-roots`
+- **Run on localhost** for local development
+- **Use HTTPS** if exposing beyond localhost
+</Warning>
+
+### Best Practices
+
+1. **Local development**: Bind to `127.0.0.1` (default)
+2. **Team environments**: Use authentication tokens and CORS allowlists
+3. **CI/CD**: Set `PAIROFCLEATS_API_TOKEN` as a secret environment variable
+4. **Production**: Always use authentication and never allow unauthenticated access
+
+## Error Handling
+
+All errors follow a consistent JSON format:
+
+```json
+{
+  "ok": false,
+  "code": "INVALID_REQUEST",
+  "message": "Query parameter is required",
+  "errors": ["#/query missing required field"]
+}
+```
+
+Common error codes:
+- `INVALID_REQUEST` (400): Schema validation errors
+- `UNAUTHORIZED` (401): Missing or invalid token
+- `FORBIDDEN` (403): Disallowed repository path
+- `NO_INDEX` (409): Index not found
+- `INTERNAL` (500): Unexpected server error
+
+See the [MCP error codes reference](/api/mcp/tools) for complete details.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Endpoints" icon="code" href="/api/endpoints">
+    Explore all available HTTP endpoints
+  </Card>
+  <Card title="Service Commands" icon="server" href="/cli/service">
+    Learn about service API and indexer modes
+  </Card>
+</CardGroup>

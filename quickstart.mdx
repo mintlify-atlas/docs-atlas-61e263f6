@@ -1,80 +1,207 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Get started with PairOfCleats in minutes - install, setup, build your first index, and perform searches.
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through installing PairOfCleats, setting it up for your repository, building your first index, and performing searches.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before you begin, ensure you have:
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- Node.js `>=24.13.0` installed (check with `node --version`)
+- npm package manager
+- A source repository to index
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+PairOfCleats uses a specific Node.js version for optimal compatibility. The repository includes an `.nvmrc` file set to `24.13.0`.
 </Note>
+
+<Steps>
+  <Step title="Install dependencies">
+    Clone or download PairOfCleats, then install dependencies:
+    
+    ```bash
+    npm install
+    ```
+    
+    This command installs all required packages and applies necessary patches for native modules.
+    
+    <Tip>
+    For production-only installs, note that dev dependencies are required for patches to apply correctly. Avoid using `npm ci --omit=dev` in this repository.
+    </Tip>
+  </Step>
+  
+  <Step title="Run guided setup">
+    PairOfCleats provides an interactive setup wizard to configure models, tooling, and cache settings:
+    
+    ```bash
+    pairofcleats setup
+    ```
+    
+    The setup wizard will:
+    - Configure embedding models and download required assets
+    - Set up optional tooling (Python, tree-sitter grammars)
+    - Configure cache root location
+    - Verify SQLite extensions if needed
+    
+    **Alternative: Non-interactive bootstrap**
+    
+    For automated or CI environments, use the bootstrap command:
+    
+    ```bash
+    pairofcleats bootstrap
+    ```
+    
+    This performs a fast, non-interactive setup with sensible defaults.
+  </Step>
+  
+  <Step title="Build your first index">
+    Build indexes for your repository with the `index build` command:
+    
+    ```bash
+    pairofcleats index build --mode all --quality balanced
+    ```
+    
+    <CodeGroup>
+    ```bash Build all modes
+    pairofcleats index build --mode all --quality balanced
+    ```
+    
+    ```bash Build code only
+    pairofcleats index build --mode code --quality balanced
+    ```
+    
+    ```bash Build prose only
+    pairofcleats index build --mode prose --quality balanced
+    ```
+    
+    ```bash High quality with embeddings
+    pairofcleats index build --mode all --quality high
+    ```
+    </CodeGroup>
+    
+    The build process will:
+    1. Discover and classify files by mode
+    2. Chunk content and extract metadata
+    3. Generate sparse artifacts (postings, chargrams)
+    4. Optionally compute embeddings for dense retrieval
+    5. Write manifest and promote to `builds/current.json`
+    
+    **Quality levels**:
+    - `fast`: Sparse-only indexing, no embeddings
+    - `balanced`: Selective embeddings based on heuristics
+    - `high`: Full embeddings for all chunks
+    
+    <Note>
+    The first build may take several minutes depending on repository size and quality settings. Subsequent incremental builds are much faster.
+    </Note>
+    
+    **Validate the index**:
+    
+    ```bash
+    pairofcleats index validate
+    ```
+    
+    This verifies artifact integrity and manifest consistency.
+  </Step>
+  
+  <Step title="Search your codebase">
+    Now you can search your indexed repository:
+    
+    ```bash
+    pairofcleats search -- "where is query cache invalidated?" --mode code
+    ```
+    
+    <CodeGroup>
+    ```bash Code search
+    pairofcleats search -- "where is query cache invalidated?" --mode code
+    ```
+    
+    ```bash Documentation search
+    pairofcleats search -- "release matrix and packaging" --mode prose
+    ```
+    
+    ```bash Search with explanations
+    pairofcleats search -- "configuration schema" --mode all --explain
+    ```
+    
+    ```bash JSON output
+    pairofcleats search -- "error handling" --mode code --json
+    ```
+    </CodeGroup>
+    
+    **Query syntax**:
+    - `"exact phrase"` - Match exact phrases
+    - `-term` - Exclude a term
+    - `-"excluded phrase"` - Exclude a phrase
+    
+    **Useful flags**:
+    - `--mode <mode>` - Search specific modes: `code`, `prose`, `extracted-prose`, `records`, `all`
+    - `--explain` - Show ranking details and pipeline stats
+    - `--stats` - Display timing and memory checkpoints
+    - `--json` - Output results in machine-readable JSON format
+    
+    <Tip>
+    Use `--explain` to understand why results were ranked the way they were. This shows sparse scores, dense scores, and fusion weights.
+    </Tip>
+  </Step>
+</Steps>
+
+## What's next?
+
+<CardGroup cols={2}>
+  <Card title="Installation guide" icon="wrench" href="/installation">
+    Learn about detailed requirements and optional capabilities
+  </Card>
+  
+  <Card title="CLI reference" icon="terminal" href="/cli/overview">
+    Explore all available commands and their options
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration/config-file">
+    Customize cache location, quality settings, and more
+  </Card>
+  
+  <Card title="API server" icon="server" href="/api/overview">
+    Run PairOfCleats as an HTTP API service
+  </Card>
+</CardGroup>
+
+## Common workflows
+
+### Watch mode for development
+
+Automatically rebuild indexes when files change:
+
+```bash
+pairofcleats index watch
+```
+
+This is useful during active development to keep indexes up-to-date.
+
+### Start the API server
+
+Run PairOfCleats as an HTTP service for programmatic access:
+
+```bash
+pairofcleats service api
+```
+
+The API server provides endpoints for search, indexing status, and management operations.
+
+### Custom cache location
+
+Set a custom cache root in `.pairofcleats.json`:
+
+```json .pairofcleats.json
+{
+  "cache": {
+    "root": "/absolute/path/to/cache"
+  }
+}
+```
+
+This is useful for centralized cache management across multiple repositories.

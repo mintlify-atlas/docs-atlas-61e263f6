@@ -1,0 +1,375 @@
+---
+title: Index Commands
+description: Build, watch, and validate code indexes
+---
+
+## pairofcleats index build
+
+Build file-backed indexes for code search.
+
+```bash
+pairofcleats index build [options]
+```
+
+### Description
+
+Builds multi-stage indexes for code and prose:
+
+1. **Stage 1** - Parse source files, extract chunks
+2. **Stage 2** - Generate embeddings for chunks
+3. **Stage 3** - Build vector indexes (LMDB/Tantivy)
+4. **Stage 4** - Build SQLite indexes with FTS and ANN
+
+### Index Modes
+
+<ParamField path="--mode" type="string" default="all">
+  Index mode to build:
+  - `code` - Source code only
+  - `prose` - Documentation and comments
+  - `extracted-prose` - Extracted documentation
+  - `records` - Structured data records
+  - `all` - All modes (default)
+</ParamField>
+
+### Build Options
+
+<ParamField path="--quality" type="string">
+  Quality preset (affects chunk size, overlap, etc.)
+</ParamField>
+
+<ParamField path="--stage" type="string">
+  Start at specific stage: `1`, `2`, `3`, or `4`
+</ParamField>
+
+<ParamField path="--dims" type="number" default="384">
+  Embedding dimensions for stub mode
+</ParamField>
+
+<ParamField path="--threads" type="number">
+  Worker thread count
+</ParamField>
+
+<ParamField path="--incremental" type="boolean" default="false">
+  Enable incremental rebuilds
+  
+  **Alias:** `-i`
+</ParamField>
+
+<ParamField path="--cache-rebuild" type="boolean" default="false">
+  Purge caches before build
+</ParamField>
+
+<ParamField path="--stub-embeddings" type="boolean" default="false">
+  Use random stub embeddings (faster builds, testing only)
+</ParamField>
+
+### Scheduler Options
+
+<ParamField path="--scheduler" type="boolean">
+  Enable build scheduler for resource management
+</ParamField>
+
+<ParamField path="--scheduler-cpu" type="number">
+  CPU token limit for scheduler
+</ParamField>
+
+<ParamField path="--scheduler-io" type="number">
+  I/O token limit for scheduler
+</ParamField>
+
+<ParamField path="--scheduler-mem" type="number">
+  Memory token limit for scheduler
+</ParamField>
+
+<ParamField path="--scheduler-starvation" type="number">
+  Starvation threshold in milliseconds
+</ParamField>
+
+<ParamField path="--scheduler-low-resource" type="boolean">
+  Force low-resource scheduler mode
+</ParamField>
+
+### SQLite Options
+
+<ParamField path="--sqlite" type="boolean">
+  Enable SQLite index build (stage 4)
+</ParamField>
+
+<ParamField path="--sqlite-batch-size" type="number">
+  Override batch size for SQLite stage 4 builds
+</ParamField>
+
+### Model & Embedding
+
+<ParamField path="--model" type="string">
+  Embedding model identifier
+</ParamField>
+
+### SCM Integration
+
+<ParamField path="--scm-provider" type="string">
+  Source control provider: `auto`, `git`, `jj`, or `none`
+</ParamField>
+
+<ParamField path="--scm-annotate" type="boolean" default="false">
+  Enable SCM blame annotations
+</ParamField>
+
+<ParamField path="--no-scm-annotate" type="boolean" default="false">
+  Disable SCM blame annotations
+</ParamField>
+
+### Output & Logging
+
+<ParamField path="--progress" type="string" default="auto">
+  Progress display mode: `auto`, `tty`, `log`, `json`, `jsonl`, or `off`
+</ParamField>
+
+<ParamField path="--log-file" type="string">
+  Write structured logs to file (implies `--log-format json`)
+</ParamField>
+
+<ParamField path="--log-format" type="string">
+  Log format: `text`, `json`, or `pretty`
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Emit JSON output
+</ParamField>
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Enable verbose logging
+</ParamField>
+
+<ParamField path="--quiet" type="boolean" default="false">
+  Suppress non-essential output
+</ParamField>
+
+### Advanced
+
+<ParamField path="--config-dump" type="boolean" default="false">
+  Dump resolved configuration and exit
+</ParamField>
+
+<ParamField path="--validate-ordering" type="boolean" default="false">
+  Fail validation if ordering ledger mismatches
+</ParamField>
+
+<ParamField path="--debug-crash" type="boolean" default="false">
+  Enable crash debugging mode
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Basic Build
+# Build all indexes
+pairofcleats index build
+```
+
+```bash Code Only
+# Build code index only
+pairofcleats index build --mode code
+```
+
+```bash Incremental
+# Incremental rebuild
+pairofcleats index build --incremental
+```
+
+```bash SQLite Only
+# Build just SQLite (requires stage 1-3 artifacts)
+pairofcleats index build --stage 4
+```
+
+```bash Fast Testing
+# Fast build with stub embeddings
+pairofcleats index build --stub-embeddings --mode code
+```
+
+</CodeGroup>
+
+---
+
+## pairofcleats index watch
+
+Watch for changes and rebuild incrementally.
+
+```bash
+pairofcleats index watch [options]
+```
+
+### Description
+
+Continuously monitors source files and rebuilds indexes on changes.
+
+### Watch Options
+
+<ParamField path="--watch-poll" type="number" default="2000">
+  Polling interval in milliseconds
+</ParamField>
+
+<ParamField path="--watch-debounce" type="number" default="500">
+  Debounce delay in milliseconds before rebuild
+</ParamField>
+
+All `index build` options are also supported.
+
+### Examples
+
+```bash
+# Watch with defaults
+pairofcleats index watch
+
+# Watch code only
+pairofcleats index watch --mode code
+
+# Custom polling interval
+pairofcleats index watch --watch-poll 5000
+```
+
+---
+
+## pairofcleats index validate
+
+Validate index artifacts for consistency.
+
+```bash
+pairofcleats index validate [options]
+```
+
+### Description
+
+Checks index artifacts for:
+- File integrity
+- Manifest consistency
+- Schema compliance
+- Cross-reference validity
+
+### Examples
+
+```bash
+# Validate default repo
+pairofcleats index validate
+
+# Validate specific repo
+pairofcleats index validate --repo /path/to/repo
+
+# JSON output
+pairofcleats index validate --json
+```
+
+---
+
+## pairofcleats index stats
+
+Report index statistics.
+
+```bash
+pairofcleats index stats [options]
+```
+
+### Options
+
+<ParamField path="--repo" type="string">
+  Repository root path
+</ParamField>
+
+<ParamField path="--index-dir" type="string">
+  Index directory path
+</ParamField>
+
+<ParamField path="--mode" type="string">
+  Index mode to report on
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output JSON format
+</ParamField>
+
+<ParamField path="--verify" type="boolean">
+  Run verification checks
+</ParamField>
+
+### Examples
+
+```bash
+pairofcleats index stats --mode code --json
+```
+
+---
+
+## pairofcleats index snapshot
+
+Manage index snapshots.
+
+```bash
+pairofcleats index snapshot [options]
+```
+
+### Snapshot Options
+
+<ParamField path="--snapshot" type="string">
+  Snapshot operation: create, list, show, rm, freeze, gc
+</ParamField>
+
+<ParamField path="--id" type="string">
+  Snapshot identifier
+</ParamField>
+
+<ParamField path="--label" type="string">
+  Human-readable snapshot label
+</ParamField>
+
+<ParamField path="--tag" type="string">
+  Tag to apply to snapshot
+</ParamField>
+
+<ParamField path="--keep-frozen" type="string">
+  Number of frozen snapshots to keep
+</ParamField>
+
+<ParamField path="--max-age-days" type="string">
+  Maximum age in days for snapshots
+</ParamField>
+
+### Examples
+
+```bash
+# Create snapshot
+pairofcleats index snapshot --snapshot create --label "v1.0"
+
+# List snapshots
+pairofcleats index snapshot --snapshot list --json
+```
+
+---
+
+## pairofcleats index diff
+
+Compute index diffs between snapshots.
+
+```bash
+pairofcleats index diff [options]
+```
+
+### Options
+
+<ParamField path="--from" type="string">
+  Source snapshot/commit
+</ParamField>
+
+<ParamField path="--to" type="string">
+  Target snapshot/commit
+</ParamField>
+
+<ParamField path="--format" type="string">
+  Output format
+</ParamField>
+
+### Examples
+
+```bash
+pairofcleats index diff --from main --to feature-branch
+```

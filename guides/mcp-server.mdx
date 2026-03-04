@@ -1,0 +1,369 @@
+---
+title: MCP server
+description: Run PairOfCleats as an MCP server for AI agent integration
+---
+
+PairOfCleats ships an MCP (Model Context Protocol) server that exposes indexing, search, and maintenance tools over stdio JSON-RPC, enabling AI agents to interact with your codebase.
+
+## Running the server
+
+The MCP server runs as a standalone Node.js process:
+
+```bash
+node tools/mcp/server.js
+```
+
+<Note>
+There is no `pairofcleats service mcp` wrapper. Run the tool script directly.
+</Note>
+
+### Transport modes
+
+PairOfCleats supports three MCP transport modes:
+
+<Tabs>
+  <Tab title="Auto (recommended)">
+    ```bash
+    node tools/mcp/server.js --mcp-mode auto
+    ```
+    
+    Automatically selects SDK mode if available, otherwise falls back to legacy.
+  </Tab>
+  
+  <Tab title="SDK">
+    ```bash
+    node tools/mcp/server.js --mcp-mode sdk
+    ```
+    
+    Uses official MCP SDK with newline-delimited JSON-RPC transport.
+    
+    <Warning>
+    Requires `@modelcontextprotocol/sdk` (optional dependency).
+    </Warning>
+  </Tab>
+  
+  <Tab title="Legacy">
+    ```bash
+    node tools/mcp/server.js --mcp-mode legacy
+    ```
+    
+    Uses Content-Length framed JSON-RPC (vscode-jsonrpc).
+  </Tab>
+</Tabs>
+
+## Mode selection
+
+Mode is resolved in this order:
+
+1. CLI flag: `--mcp-mode <mode>`
+2. Environment variable: `MCP_MODE` or `PAIROFCLEATS_MCP_MODE`
+3. Config file: `mcp.mode` in `.pairofcleats.json`
+4. Default: `legacy` (unless `auto` is explicitly set)
+
+## Configuration
+
+Configure the MCP server in `.pairofcleats.json`:
+
+```json
+{
+  "mcp": {
+    "mode": "auto",
+    "maxBufferBytes": 8388608,
+    "queueMax": 64,
+    "toolTimeoutMs": 120000,
+    "toolTimeouts": {
+      "build_index": 600000,
+      "download_models": 300000
+    }
+  }
+}
+```
+
+### Configuration options
+
+<ParamField path="mode" type="string" default="legacy">
+  Transport mode: `legacy`, `sdk`, or `auto`
+</ParamField>
+
+<ParamField path="maxBufferBytes" type="number" default="8388608">
+  Maximum buffer size for JSON-RPC messages (8MB default)
+</ParamField>
+
+<ParamField path="queueMax" type="number" default="64">
+  Maximum number of queued tool requests
+</ParamField>
+
+<ParamField path="toolTimeoutMs" type="number" default="120000">
+  Default timeout for tool calls in milliseconds (2 minutes)
+</ParamField>
+
+<ParamField path="toolTimeouts" type="object" default="{}">
+  Per-tool timeout overrides (tool name → timeout in ms)
+</ParamField>
+
+### Environment variables
+
+- **MCP_MODE** / **PAIROFCLEATS_MCP_MODE** - Override transport mode
+- **PAIROFCLEATS_MCP_MAX_BUFFER_BYTES** - Override buffer size
+- **PAIROFCLEATS_MCP_QUEUE_MAX** - Override queue limit
+- **PAIROFCLEATS_MCP_TOOL_TIMEOUT_MS** - Override default tool timeout
+
+## Capabilities and versions
+
+The `initialize` response includes:
+
+```json
+{
+  "protocolVersion": "2024-11-05",
+  "schemaVersion": "1.0.0",
+  "toolVersion": "0.3.0",
+  "capabilities": {
+    "tools": {},
+    "experimental": {
+      "pairofcleats": {
+        "hasEmbeddings": true,
+        "hasTreeSitter": true,
+        "hasSqliteVec": false
+      }
+    }
+  }
+}
+```
+
+<Info>
+Canonical tool schemas: `docs/contracts/mcp-tools.schema.json`
+</Info>
+
+## Available tools
+
+The MCP server exposes 18 tools across several categories:
+
+### Status and configuration
+- **index_status** - Check repository and index status
+- **config_status** - Show effective configuration
+
+### Indexing
+- **build_index** - Build indexes for a repository
+- **build_sqlite_index** - Build SQLite database
+- **compact_sqlite_index** - Compact SQLite database
+
+### Search
+- **search** - Search single repository
+- **search_workspace** - Federated workspace search
+
+### Triage
+- **triage_ingest** - Ingest vulnerability findings
+- **triage_decision** - Create triage decisions
+- **triage_context_pack** - Generate context packs
+
+### Downloads
+- **download_models** - Download embedding models
+- **download_dictionaries** - Download dictionary wordlists
+- **download_extensions** - Download SQLite extensions
+- **verify_extensions** - Verify extension availability
+
+### Maintenance
+- **cache_gc** - Run garbage collection
+- **clean_artifacts** - Clean caches
+- **bootstrap** - Complete setup
+- **report_artifacts** - Report artifact sizes
+
+<Tip>
+See the [MCP tools reference](/api/mcp/tools) for complete parameter documentation.
+</Tip>
+
+## Error handling
+
+Tool failures return `isError: true` with a structured error payload:
+
+```json
+{
+  "isError": true,
+  "code": "INDEX_NOT_FOUND",
+  "message": "No index found for repository",
+  "hint": "Run 'pairofcleats index build' first",
+  "stderr": "...",
+  "exitCode": 1
+}
+```
+
+### Error codes
+
+PairOfCleats uses canonical error codes defined in `docs/contracts/mcp-error-codes.md`:
+
+- **QUEUE_OVERLOADED** - Tool queue is full
+- **INVALID_REQUEST** - Invalid parameters or payload
+- **INDEX_NOT_FOUND** - No index available
+- **TIMEOUT** - Tool execution exceeded timeout
+- **INTERNAL** - Unexpected server error
+
+<Warning>
+When `QUEUE_OVERLOADED` occurs, increase `mcp.queueMax` or retry later.
+</Warning>
+
+## Progress notifications
+
+Long-running tools emit `notifications/progress` messages:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "notifications/progress",
+  "params": {
+    "id": 123,
+    "tool": "build_index",
+    "message": "Building code index...",
+    "phase": "compute",
+    "stream": "stdout",
+    "ts": 1234567890
+  }
+}
+```
+
+<Note>
+`id: 0` is valid. Only `null` or `undefined` indicates a missing ID.
+</Note>
+
+## Request cancellation
+
+Cancel in-flight tool calls with `$/cancelRequest`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "$/cancelRequest",
+  "params": {
+    "id": 123
+  }
+}
+```
+
+The tool process is terminated, and a cancellation error is returned.
+
+## Client integration
+
+Connect to the MCP server from your application:
+
+<Steps>
+  <Step title="Spawn the server process">
+    ```javascript
+    import { spawn } from 'child_process';
+    
+    const mcp = spawn('node', ['tools/mcp/server.js', '--mcp-mode', 'auto'], {
+      stdio: ['pipe', 'pipe', 'inherit']
+    });
+    ```
+  </Step>
+  
+  <Step title="Send initialize request">
+    ```javascript
+    const initRequest = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {}
+      }
+    };
+    
+    mcp.stdin.write(JSON.stringify(initRequest) + '\n');
+    ```
+  </Step>
+  
+  <Step title="Call tools">
+    ```javascript
+    const searchRequest = {
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'search',
+        arguments: {
+          query: 'function handleRequest',
+          mode: 'code',
+          maxResults: 10
+        }
+      }
+    };
+    
+    mcp.stdin.write(JSON.stringify(searchRequest) + '\n');
+    ```
+  </Step>
+  
+  <Step title="Handle responses">
+    ```javascript
+    mcp.stdout.on('data', (chunk) => {
+      const response = JSON.parse(chunk.toString());
+      
+      if (response.result) {
+        // Success
+        console.log(response.result.content[0].text);
+      } else if (response.error) {
+        // Error
+        console.error(response.error);
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+See the [MCP integration guide](/api/mcp/integration) for a complete client implementation.
+</Tip>
+
+## SDK availability
+
+SDK mode requires the optional dependency `@modelcontextprotocol/sdk`:
+
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+If the SDK is not installed, SDK mode will exit with:
+
+```
+Error: SDK mode requires @modelcontextprotocol/sdk
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use auto mode for flexibility">
+    Set `--mcp-mode auto` to automatically use SDK when available, with graceful fallback to legacy mode.
+  </Accordion>
+  
+  <Accordion title="Configure appropriate timeouts">
+    Long-running operations like `build_index` need higher timeouts:
+    
+    ```json
+    {
+      "mcp": {
+        "toolTimeouts": {
+          "build_index": 600000,
+          "download_models": 300000
+        }
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Monitor queue overloads">
+    If you see `QUEUE_OVERLOADED` errors, increase `mcp.queueMax` or implement client-side rate limiting.
+  </Accordion>
+  
+  <Accordion title="Handle progress notifications">
+    Subscribe to `notifications/progress` for real-time feedback on long operations.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP tools reference" icon="wrench" href="/api/mcp/tools">
+    Complete list of tools and parameters
+  </Card>
+  <Card title="Integration guide" icon="plug" href="/api/mcp/integration">
+    Build an MCP client
+  </Card>
+</CardGroup>

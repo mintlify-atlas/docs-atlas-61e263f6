@@ -1,0 +1,191 @@
+---
+title: Setup Commands
+description: Initialize and configure PairOfCleats
+---
+
+## pairofcleats setup
+
+Guided interactive setup flow for first-time configuration.
+
+```bash
+pairofcleats setup [options]
+```
+
+### Description
+
+The setup command walks you through:
+
+1. **Configuration validation** - Validates `.pairofcleats.json` if present
+2. **Dependency installation** - Installs npm dependencies if needed
+3. **Dictionary download** - Downloads word lists for identifier splitting
+4. **Model download** - Downloads embedding models
+5. **Extension download** - Downloads SQLite vector extensions for ANN
+6. **Tooling installation** - Installs optional parsing tools (ctags, etc.)
+7. **Artifact restoration** - Restores CI artifacts if available
+8. **Index building** - Builds file-backed indexes
+9. **SQLite building** - Builds SQLite indexes for fast queries
+
+### Options
+
+<ParamField path="--json" type="boolean" default="false">
+  Emit JSON summary on stdout (progress goes to stderr)
+</ParamField>
+
+<ParamField path="--non-interactive" type="boolean" default="false">
+  Skip all prompts and use defaults (useful for CI)
+  
+  **Alias:** `--ci`
+</ParamField>
+
+<ParamField path="--validate-config" type="boolean" default="false">
+  Force configuration validation step
+</ParamField>
+
+<ParamField path="--skip-validate" type="boolean" default="false">
+  Skip configuration validation
+</ParamField>
+
+<ParamField path="--skip-install" type="boolean" default="false">
+  Skip npm dependency installation
+</ParamField>
+
+<ParamField path="--skip-dicts" type="boolean" default="false">
+  Skip dictionary download
+</ParamField>
+
+<ParamField path="--skip-models" type="boolean" default="false">
+  Skip embedding model download
+</ParamField>
+
+<ParamField path="--skip-extensions" type="boolean" default="false">
+  Skip SQLite extension download
+</ParamField>
+
+<ParamField path="--skip-tooling" type="boolean" default="false">
+  Skip optional tooling installation
+</ParamField>
+
+<ParamField path="--skip-index" type="boolean" default="false">
+  Skip index building step
+</ParamField>
+
+<ParamField path="--skip-sqlite" type="boolean" default="false">
+  Skip SQLite index building
+</ParamField>
+
+<ParamField path="--skip-artifacts" type="boolean" default="false">
+  Skip CI artifact restoration
+</ParamField>
+
+<ParamField path="--with-sqlite" type="boolean" default="false">
+  Force SQLite index building
+  
+  **Alias:** `-s`
+</ParamField>
+
+<ParamField path="--incremental" type="boolean" default="false">
+  Enable incremental indexing mode
+  
+  **Alias:** `-i`
+</ParamField>
+
+<ParamField path="--root" type="string">
+  Override repository root path
+</ParamField>
+
+<ParamField path="--repo" type="string">
+  Override repository root path (same as --root)
+</ParamField>
+
+<ParamField path="--tooling-scope" type="string">
+  Tooling installation scope: `cache` or `global`
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Interactive Setup
+# Run full interactive setup
+pairofcleats setup
+```
+
+```bash CI Setup
+# Non-interactive setup for continuous integration
+pairofcleats setup --non-interactive --skip-artifacts
+```
+
+```bash Quick Setup
+# Skip optional downloads, just build indexes
+pairofcleats setup --skip-dicts --skip-tooling --skip-extensions
+```
+
+```bash JSON Output
+# Get structured output for automation
+pairofcleats setup --json --non-interactive > setup-result.json
+```
+
+</CodeGroup>
+
+### Output Format
+
+With `--json`, setup emits a summary:
+
+```json
+{
+  "root": "/path/to/repo",
+  "nonInteractive": true,
+  "incremental": false,
+  "steps": {
+    "config": { "skipped": false, "ok": true },
+    "install": { "skipped": false, "present": true },
+    "dictionaries": { "present": true, "downloaded": false },
+    "models": { "present": true, "downloaded": false },
+    "extensions": { "enabled": true, "present": true },
+    "tooling": { "missing": [], "installed": false },
+    "index": { "ready": true, "built": false, "ok": true },
+    "sqlite": { "built": false, "ok": true }
+  },
+  "errors": []
+}
+```
+
+---
+
+## pairofcleats bootstrap
+
+Fast, non-interactive bootstrap flow.
+
+```bash
+pairofcleats bootstrap
+```
+
+### Description
+
+Bootstrap performs minimal setup without prompts:
+- Installs dependencies
+- Downloads essential models
+- Skips optional tooling and extensions
+
+This is equivalent to:
+```bash
+pairofcleats setup --non-interactive --skip-tooling --skip-extensions
+```
+
+### Examples
+
+```bash
+# Quick bootstrap
+pairofcleats bootstrap
+
+# Bootstrap for specific repo
+pairofcleats bootstrap --repo /path/to/repo
+```
+
+### When to Use
+
+- **CI/CD pipelines** - Fast, predictable setup
+- **Docker builds** - Minimal dependencies
+- **Quick testing** - Get running fast without extras
+
+Use `pairofcleats setup` for full interactive configuration.

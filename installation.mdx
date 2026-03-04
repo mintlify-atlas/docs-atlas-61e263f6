@@ -1,0 +1,298 @@
+---
+title: Installation
+description: Detailed installation requirements, optional capabilities, and setup instructions for PairOfCleats.
+---
+
+# Installation
+
+This guide covers the complete installation process for PairOfCleats, including runtime requirements, optional capabilities, and troubleshooting.
+
+## Runtime requirements
+
+### Hard requirements
+
+These are required for PairOfCleats to function:
+
+- **Node.js** `>=24.13.0`
+  - The repository includes an `.nvmrc` file set to `24.13.0`
+  - Check your version: `node --version`
+  - Download from [nodejs.org](https://nodejs.org/) or use a version manager like [nvm](https://github.com/nvm-sh/nvm)
+
+- **npm**
+  - Normal dependency installation with scripts enabled
+  - Included with Node.js installation
+
+<Warning>
+Dev dependencies are required for patches to apply correctly. Do not use `npm ci --omit=dev` or production-only installs, as they will fail when required `patches/*.patch` files are present.
+</Warning>
+
+### Optional capabilities
+
+These enhance PairOfCleats but are not required:
+
+- **Python 3** - For Python-related tooling, tests, and optional AST parsing paths
+- **sqlite-vec extension** - Enables faster ANN (Approximate Nearest Neighbor) search when available
+- **LMDB / LanceDB / HNSW backends** - Alternative storage backends selected by policy and capability
+- **PDF/DOCX extraction dependencies** - Enables capability-gated document extraction flows for `extracted-prose` mode
+
+<Note>
+PairOfCleats will automatically detect and use optional capabilities when available. Missing optional dependencies will not prevent core functionality.
+</Note>
+
+## Installation methods
+
+### From source (recommended)
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/your-org/pairofcleats.git
+    cd pairofcleats
+    ```
+  </Step>
+  
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+    
+    This command:
+    - Installs all dependencies (including dev dependencies)
+    - Applies necessary patches via `patch-package`
+    - Rebuilds native modules for your platform
+    - Runs postinstall hooks
+    
+    <Tip>
+    If you encounter issues with native modules, you can manually rebuild them:
+    ```bash
+    npm run rebuild:native
+    ```
+    </Tip>
+  </Step>
+  
+  <Step title="Verify installation">
+    Check that PairOfCleats is installed correctly:
+    
+    ```bash
+    pairofcleats --version
+    ```
+    
+    Verify native extensions:
+    
+    ```bash
+    npm run verify:native
+    ```
+  </Step>
+</Steps>
+
+### CI/CD installation
+
+For continuous integration environments:
+
+```bash
+npm run bootstrap:ci
+```
+
+This uses `npm ci` for reproducible installs while ensuring patches are applied and native modules are rebuilt.
+
+## Platform-specific notes
+
+### Linux
+
+- Native modules compile without additional dependencies on most distributions
+- For Ubuntu/Debian: `sudo apt-get install build-essential python3`
+- For RHEL/CentOS: `sudo yum install gcc-c++ make python3`
+
+### macOS
+
+- Xcode Command Line Tools required: `xcode-select --install`
+- Apple Silicon (M1/M2) users: Native modules are automatically built for ARM64
+
+### Windows
+
+- Visual Studio Build Tools or Visual Studio 2019+ required
+- Python 3 should be installed via Microsoft Store or python.org
+- Use PowerShell 7.5+ for best compatibility
+
+<Warning>
+Windows users should ensure long path support is enabled to avoid path length issues with node_modules:
+```powershell
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+```
+</Warning>
+
+## Setup and configuration
+
+### Guided setup
+
+After installation, run the interactive setup wizard:
+
+```bash
+pairofcleats setup
+```
+
+The wizard will guide you through:
+
+1. **Model configuration**
+   - Select embedding models for dense retrieval
+   - Download model files if needed
+   - Configure model cache location
+
+2. **Tooling setup**
+   - Python availability detection
+   - Tree-sitter grammar installation
+   - External tool configuration
+
+3. **Cache configuration**
+   - Set cache root directory
+   - Configure cache quotas and GC policies
+
+4. **Extension verification**
+   - Verify SQLite extensions
+   - Check ANN backend availability
+
+### Non-interactive bootstrap
+
+For automated environments:
+
+```bash
+pairofcleats bootstrap
+```
+
+This applies sensible defaults without user interaction.
+
+### Manual configuration
+
+Create a `.pairofcleats.json` file in your repository root:
+
+```json .pairofcleats.json
+{
+  "cache": {
+    "root": "/absolute/path/to/cache"
+  },
+  "quality": "balanced",
+  "concurrency": 4,
+  "embeddings": {
+    "model": "all-MiniLM-L6-v2",
+    "provider": "transformers"
+  }
+}
+```
+
+<Tip>
+See the [configuration reference](/configuration/config-file) for all available options and their schemas.
+</Tip>
+
+## Verifying the installation
+
+### Check tooling availability
+
+```bash
+pairofcleats tooling doctor
+```
+
+This command inspects:
+- Node.js version and capabilities
+- Python availability and version
+- SQLite extensions and ANN backends
+- Tree-sitter grammar availability
+- External tool detection (ctags, ripgrep, etc.)
+
+### Verify native extensions
+
+```bash
+npm run verify:extensions
+```
+
+Checks that SQLite extensions are loadable and functioning.
+
+### Run smoke tests
+
+```bash
+node tests/run.js --lane smoke
+```
+
+Runs a quick suite of tests to verify core functionality.
+
+## Troubleshooting
+
+### Native module build failures
+
+If native modules fail to build:
+
+1. **Clear node_modules and rebuild**:
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+2. **Manually rebuild native modules**:
+   ```bash
+   npm run rebuild:native
+   ```
+
+3. **Repair native modules**:
+   ```bash
+   npm run repair:native
+   ```
+
+### Patch application failures
+
+If patches fail to apply:
+
+1. Ensure dev dependencies are installed (do not use `--omit=dev`)
+2. Verify `patch-package` is working:
+   ```bash
+   npm run patch
+   ```
+
+### Missing optional dependencies
+
+To check which optional capabilities are available:
+
+```bash
+pairofcleats tooling doctor --json
+```
+
+This outputs a detailed capability report.
+
+### Permission issues
+
+If you encounter permission errors:
+
+- Linux/macOS: Avoid using `sudo npm install`. Use a version manager like nvm instead.
+- Windows: Run PowerShell as Administrator if necessary.
+
+## Updating PairOfCleats
+
+To update to the latest version:
+
+```bash
+git pull origin main
+npm install
+```
+
+For major version updates, it's recommended to:
+
+1. Clear the cache: `pairofcleats cache clear --all --force`
+2. Rebuild indexes: `pairofcleats index build --mode all`
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Build your first index and run searches
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration/config-file">
+    Customize PairOfCleats for your workflow
+  </Card>
+  
+  <Card title="CLI reference" icon="terminal" href="/cli/overview">
+    Learn all available commands
+  </Card>
+  
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand how PairOfCleats works internally
+  </Card>
+</CardGroup>

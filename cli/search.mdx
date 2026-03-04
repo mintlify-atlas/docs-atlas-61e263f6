@@ -1,0 +1,271 @@
+---
+title: Search Command
+description: Query indexed repositories with advanced search capabilities
+---
+
+## pairofcleats search
+
+Query indexed data across code, prose, and records.
+
+```bash
+pairofcleats search "<query>" [options]
+```
+
+### Description
+
+The search command provides semantic and keyword search across indexed repositories. It supports multiple search modes, backends, and output formats.
+
+### Basic Usage
+
+```bash
+# Simple search
+pairofcleats search "authentication"
+
+# Search with quotes
+pairofcleats search "function handleRequest"
+```
+
+### Search Modes
+
+<ParamField path="--mode" type="string" default="default">
+  Search mode:
+  - `code` - Search source code only
+  - `prose` - Search documentation and comments
+  - `records` - Search structured records
+  - `extracted-prose` - Search extracted documentation
+  - `default` - Use default mode from config
+</ParamField>
+
+### Backend Selection
+
+<ParamField path="--backend" type="string" default="auto">
+  Search backend:
+  - `auto` - Automatically select best backend
+  - `sqlite` - SQLite full-text search
+  - `sqlite-fts` - SQLite FTS5 only
+  - `lmdb` - LMDB vector search
+</ParamField>
+
+### Repository Options
+
+<ParamField path="--repo" type="string">
+  Repository root path (defaults to current directory)
+</ParamField>
+
+<ParamField path="--as-of" type="string">
+  Index reference (commit, tag, or snapshot ID)
+</ParamField>
+
+<ParamField path="--snapshot" type="string">
+  Specific snapshot ID to search
+</ParamField>
+
+### Vector Search Options
+
+<ParamField path="--ann" type="boolean">
+  Enable approximate nearest neighbor (ANN) search
+</ParamField>
+
+<ParamField path="--no-ann" type="boolean">
+  Disable ANN search, use exact search
+</ParamField>
+
+### Output Options
+
+<ParamField path="--json" type="boolean" default="false">
+  Output results as JSON
+</ParamField>
+
+<ParamField path="--compact" type="boolean">
+  Use compact output format
+</ParamField>
+
+<ParamField path="--stats" type="boolean">
+  Include search statistics in output
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Code Search
+# Search code only
+pairofcleats search "async function" --mode code
+```
+
+```bash Documentation Search
+# Search prose/docs
+pairofcleats search "installation guide" --mode prose
+```
+
+```bash JSON Output
+# Get structured results
+pairofcleats search "error handling" --json
+```
+
+```bash Specific Backend
+# Use SQLite FTS
+pairofcleats search "queryString" --backend sqlite-fts
+```
+
+```bash Historical Search
+# Search at specific commit
+pairofcleats search "deprecated" --as-of v1.0.0
+```
+
+```bash With Statistics
+# Include timing and relevance stats
+pairofcleats search "performance" --stats --json
+```
+
+</CodeGroup>
+
+### Query Syntax
+
+#### Basic Queries
+
+```bash
+# Single term
+pairofcleats search "authentication"
+
+# Multiple terms (implicit AND)
+pairofcleats search "user authentication token"
+
+# Phrase search (exact match)
+pairofcleats search "handle user request"
+```
+
+#### Advanced Queries
+
+When using SQLite FTS backend, you can use FTS5 syntax:
+
+```bash
+# OR operator
+pairofcleats search "login OR signin" --backend sqlite-fts
+
+# NOT operator
+pairofcleats search "auth NOT oauth" --backend sqlite-fts
+
+# Prefix search
+pairofcleats search "handle*" --backend sqlite-fts
+
+# Proximity search (NEAR)
+pairofcleats search "user NEAR/5 authentication" --backend sqlite-fts
+```
+
+### Output Format
+
+#### Default Output
+
+```
+[search] query: "authentication"
+[search] mode: code, backend: sqlite
+
+src/auth/middleware.js:42
+  async function authenticateRequest(req, res, next) {
+    ...
+  }
+
+src/auth/utils.js:15
+  function validateAuthToken(token) {
+    ...
+  }
+
+2 results in 45ms
+```
+
+#### JSON Output
+
+```json
+{
+  "query": "authentication",
+  "mode": "code",
+  "backend": "sqlite",
+  "results": [
+    {
+      "path": "src/auth/middleware.js",
+      "line": 42,
+      "score": 0.89,
+      "snippet": "async function authenticateRequest(req, res, next) {",
+      "context": "..."
+    }
+  ],
+  "stats": {
+    "totalResults": 2,
+    "durationMs": 45,
+    "backend": "sqlite"
+  }
+}
+```
+
+### Search Backends
+
+#### Auto Backend
+
+Automatically selects the best available backend based on:
+- Index artifacts present
+- Query characteristics
+- Configuration preferences
+
+#### SQLite Backend
+
+- **Best for:** Keyword search, exact matches
+- **Features:** FTS5 full-text search, optional ANN extension
+- **Speed:** Very fast for keyword queries
+
+#### SQLite FTS Backend
+
+- **Best for:** Advanced text queries with operators
+- **Features:** Full FTS5 syntax support
+- **Speed:** Optimized for text matching
+
+#### LMDB Backend
+
+- **Best for:** Vector similarity search
+- **Features:** Native vector operations
+- **Speed:** Fast for semantic similarity
+
+### Performance Tips
+
+1. **Use specific modes** - Searching `--mode code` is faster than `default` (all modes)
+2. **Enable ANN** - Use `--ann` for large repositories (trades accuracy for speed)
+3. **Choose backend** - Use `--backend sqlite-fts` for keyword search
+4. **Compact output** - Use `--compact` to reduce output size
+
+### Troubleshooting
+
+#### No Results
+
+```bash
+# Verify indexes exist
+pairofcleats index validate
+
+# Check index stats
+pairofcleats index stats --mode code
+
+# Rebuild if needed
+pairofcleats index build
+```
+
+#### Slow Searches
+
+```bash
+# Use specific mode
+pairofcleats search "query" --mode code
+
+# Try different backend
+pairofcleats search "query" --backend sqlite-fts
+
+# Enable ANN for large repos
+pairofcleats search "query" --ann
+```
+
+#### Backend Not Available
+
+```bash
+# Check which backends are available
+pairofcleats index stats
+
+# Build missing indexes
+pairofcleats index build --sqlite
+```

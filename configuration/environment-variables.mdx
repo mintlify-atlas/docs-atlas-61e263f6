@@ -1,0 +1,375 @@
+---
+title: Environment Variables
+description: Environment variables for configuring PairOfCleats behavior at runtime
+---
+
+PairOfCleats supports environment variables for runtime configuration, secrets, and testing. These override values from the configuration file.
+
+## Secrets
+
+<ParamField path="PAIROFCLEATS_API_TOKEN" type="string">
+  Bearer token for API/MCP authentication when auth is enabled.
+  
+  ```bash
+  export PAIROFCLEATS_API_TOKEN="your-secret-token"
+  ```
+</ParamField>
+
+## Runtime Configuration
+
+### Cache and Storage
+
+<ParamField path="PAIROFCLEATS_HOME" type="string">
+  Override the PairOfCleats home directory. Defaults to platform-specific locations:
+  - Windows: `%LOCALAPPDATA%\PairOfCleats`
+  - macOS/Linux: `~/.local/share/pairofcleats`
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_CACHE_ROOT" type="string">
+  Override the cache root directory. Takes precedence over config file setting.
+  
+  ```bash
+  export PAIROFCLEATS_CACHE_ROOT="/custom/cache/path"
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_CACHE_NAMESPACE" type="string">
+  Cache namespace for isolation. Useful for parallel builds or testing.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_CACHE_REBUILD" type="string">
+  Force cache rebuild when set to non-empty value.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_CACHE_METRICS_SAMPLE_RATE" type="number">
+  Sampling rate for cache metrics (0.0 to 1.0).
+</ParamField>
+
+### MCP Configuration
+
+<ParamField path="MCP_MODE" type="string">
+  Alias for `PAIROFCLEATS_MCP_MODE`. Values: `legacy`, `sdk`, `auto`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MCP_MODE" type="string">
+  MCP server mode. Requires @modelcontextprotocol/sdk capability for `sdk` mode.
+  
+  Values:
+  - `legacy` - Legacy MCP protocol
+  - `sdk` - Modern SDK-based protocol
+  - `auto` - Automatic detection (default)
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MCP_TRANSPORT" type="string">
+  MCP transport mechanism (stdio, http, etc.).
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MCP_QUEUE_MAX" type="number">
+  Maximum queued MCP requests.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MCP_MAX_BUFFER_BYTES" type="number">
+  Maximum buffer size for MCP messages in bytes.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MCP_TOOL_TIMEOUT_MS" type="number">
+  Default timeout for MCP tool calls in milliseconds.
+</ParamField>
+
+### Runtime Tuning
+
+<ParamField path="PAIROFCLEATS_THREADS" type="number">
+  Number of worker threads for parallel operations.
+  
+  ```bash
+  export PAIROFCLEATS_THREADS=8
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_BUNDLE_THREADS" type="number">
+  Number of threads for bundle operations.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_WORKER_POOL" type="string">
+  Worker pool configuration.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_NODE_OPTIONS" type="string">
+  Additional Node.js command-line options.
+  
+  ```bash
+  export PAIROFCLEATS_NODE_OPTIONS="--max-old-space-size=8192"
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_MAX_OLD_SPACE_MB" type="number">
+  Node.js old-space heap size limit in megabytes.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_UV_THREADPOOL_SIZE" type="number">
+  UV_THREADPOOL_SIZE override for libuv operations.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_IO_OVERSUBSCRIBE" type="boolean">
+  Allow I/O operations to exceed CPU core count. Set to `1` or `true` to enable.
+</ParamField>
+
+### Embeddings
+
+<ParamField path="PAIROFCLEATS_EMBEDDINGS" type="string">
+  Embeddings configuration or provider override.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_EMBEDDINGS_SAMPLE_FILES" type="number">
+  Number of files to sample for embedding generation.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_EMBEDDINGS_SAMPLE_SEED" type="number">
+  Random seed for embedding sampling.
+</ParamField>
+
+### Directory Overrides
+
+<ParamField path="PAIROFCLEATS_MODELS_DIR" type="string">
+  Directory for model files.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_DICT_DIR" type="string">
+  Directory for dictionary files.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_EXTENSIONS_DIR" type="string">
+  Directory for extensions.
+</ParamField>
+
+### Logging and Diagnostics
+
+<ParamField path="PAIROFCLEATS_VERBOSE" type="string">
+  Enable verbose logging. Set to `1` or `true`.
+  
+  ```bash
+  export PAIROFCLEATS_VERBOSE=1
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_LOG_LEVEL" type="string">
+  Logging level. Values: `error`, `warn`, `info`, `debug`, `trace`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_LOG_FORMAT" type="string">
+  Log output format. Values: `json`, `pretty`, `compact`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_STAGE" type="string">
+  Deployment stage (dev, staging, prod).
+</ParamField>
+
+### Service Configuration
+
+<ParamField path="PAIROFCLEATS_INDEX_DAEMON" type="string">
+  Enable index daemon mode. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_INDEX_DAEMON_SESSION" type="string">
+  Index daemon session identifier.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_INDEXER_SERVICE_EXECUTION" type="string">
+  Indexer service execution mode.
+</ParamField>
+
+### Backend Selection
+
+<ParamField path="PAIROFCLEATS_WATCHER_BACKEND" type="string">
+  File watcher backend selection.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_XXHASH_BACKEND" type="string">
+  xxHash implementation backend.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_REGEX_ENGINE" type="string">
+  Regular expression engine selection.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_COMPRESSION" type="string">
+  Compression algorithm selection.
+</ParamField>
+
+### Feature Toggles
+
+<ParamField path="PAIROFCLEATS_DOC_EXTRACT" type="string">
+  Enable document extraction (PDF, DOCX). Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_IMPORT_GRAPH" type="string">
+  Enable import graph generation. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_DEBUG_CRASH" type="string">
+  Enable crash debugging mode. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_DEBUG_ORDERED" type="string">
+  Enable ordered execution for deterministic debugging. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TRACE_ARTIFACT_IO" type="string">
+  Trace artifact I/O operations. Set to `1` or `true`.
+</ParamField>
+
+### Performance Tuning
+
+<ParamField path="PAIROFCLEATS_FILE_CACHE_MAX" type="number">
+  Maximum in-memory file cache entries.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SUMMARY_CACHE_MAX" type="number">
+  Maximum in-memory summary cache entries.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_DISCOVERY_STAT_CONCURRENCY" type="number">
+  Concurrency limit for file discovery stat operations.
+</ParamField>
+
+### Scheduler Configuration
+
+<ParamField path="PAIROFCLEATS_SCHEDULER" type="string">
+  Enable resource scheduler. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SCHEDULER_CPU" type="number">
+  CPU tokens for scheduler.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SCHEDULER_IO" type="number">
+  I/O tokens for scheduler.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SCHEDULER_MEM" type="number">
+  Memory tokens for scheduler.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SCHEDULER_LOW_RESOURCE" type="string">
+  Enable low-resource mode for scheduler. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_SCHEDULER_STARVATION_MS" type="number">
+  Starvation timeout in milliseconds.
+</ParamField>
+
+## Test-Only Variables
+
+<Warning>
+These variables require `PAIROFCLEATS_TESTING=1` to be set and are only for development/testing.
+</Warning>
+
+<ParamField path="PAIROFCLEATS_TESTING" type="string">
+  Enable test mode. Must be set to `1` for other test variables to take effect.
+  
+  ```bash
+  export PAIROFCLEATS_TESTING=1
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_CONFIG" type="string">
+  JSON object string for test configuration override.
+  
+  ```bash
+  export PAIROFCLEATS_TEST_CONFIG='{"quality":"fast"}'
+  ```
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_MAX_JSON_BYTES" type="number">
+  Maximum JSON payload size for tests in bytes.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_ALLOW_MISSING_COMPAT_KEY" type="string">
+  Allow missing compatibility keys in tests. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_FORCE_DOCX_MISSING" type="string">
+  Force DOCX extraction to appear unavailable. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_FORCE_PDF_MISSING" type="string">
+  Force PDF extraction to appear unavailable. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_MCP_DELAY_MS" type="number">
+  Artificial delay for MCP operations in tests (milliseconds).
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_STUB_DOCX_EXTRACT" type="string">
+  Use stub DOCX extraction in tests. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_STUB_PDF_EXTRACT" type="string">
+  Use stub PDF extraction in tests. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_STUB_PDF_EXTRACT_DELAY_MS" type="number">
+  Delay for stub PDF extraction in milliseconds.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_ALLOW_TIMEOUT_TARGET" type="string">
+  Allow timeout target in tests. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_CACHE_SUFFIX" type="string">
+  Suffix for test cache directories.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_CODE_MAP_BUDGET_MS" type="number">
+  Time budget for code map operations in tests (milliseconds).
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_LOG_DIR" type="string">
+  Directory for test logs.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_LOG_SILENT" type="string">
+  Suppress test logging output. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_MAX_OLD_SPACE_MB" type="number">
+  Memory limit override for tests in megabytes.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_NODE_OPTIONS" type="string">
+  Node.js options override for tests.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_PID_FILE" type="string">
+  PID file path for test processes.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_RETRIES" type="number">
+  Number of test retries on failure.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_TANTIVY" type="string">
+  Enable Tantivy backend in tests. Set to `1` or `true`.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_THREADS" type="number">
+  Thread count override for tests.
+</ParamField>
+
+<ParamField path="PAIROFCLEATS_TEST_TIMEOUT_MS" type="number">
+  Test timeout in milliseconds.
+</ParamField>
+
+## Precedence
+
+Configuration precedence (highest to lowest):
+
+1. CLI flags (e.g., `--threads 8`)
+2. Environment variables (e.g., `PAIROFCLEATS_THREADS=8`)
+3. Configuration file (`.pairofcleats.json`)
+4. Defaults
+
+## Related
+
+- [Configuration File](/configuration/config-file) - .pairofcleats.json structure
+- [Cache Management](/configuration/cache-management) - Cache structure and garbage collection

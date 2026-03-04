@@ -1,0 +1,195 @@
+---
+title: 'MCP Server Overview'
+description: 'PairOfCleats MCP server architecture, transport modes, and configuration'
+---
+
+## Overview
+
+PairOfCleats ships an MCP (Model Context Protocol) server that exposes indexing, search, and maintenance tools over JSON-RPC 2.0. The server supports multiple transport modes and provides comprehensive tooling for code intelligence operations.
+
+## Running the Server
+
+Start the MCP server using:
+
+```bash
+node tools/mcp/server.js --mcp-mode <legacy|sdk|auto>
+```
+
+## Transport Modes
+
+The server supports three transport modes for JSON-RPC 2.0 over stdio:
+
+### Legacy Mode
+
+- **Default mode** unless explicitly configured otherwise
+- Uses Content-Length framed JSON-RPC over stdio
+- Based on vscode-jsonrpc framing and parser
+- Stable and well-tested
+
+### SDK Mode
+
+- Uses the official MCP SDK stdio transport
+- Newline-delimited JSON format
+- Requires `@modelcontextprotocol/sdk` package
+
+### Auto Mode
+
+- Automatically selects SDK mode when `@modelcontextprotocol/sdk` is available
+- Falls back to legacy mode if SDK is not installed
+- Provides seamless transition path
+
+## Mode Selection
+
+Mode selection follows this precedence order:
+
+1. CLI flag: `--mcp-mode <mode>`
+2. Environment variable: `PAIROFCLEATS_MCP_MODE` or `MCP_MODE`
+3. Configuration: `mcp.mode` in config file
+4. Default: `legacy`
+
+<Note>
+There is no silent fallback from SDK to legacy mode when SDK mode is explicitly requested. If SDK mode is requested but unavailable, the server will fail rather than silently fall back.
+</Note>
+
+## Configuration
+
+Configure the MCP server in your PairOfCleats config file:
+
+```json
+{
+  "mcp": {
+    "mode": "auto",
+    "maxBufferBytes": 8388608,
+    "queueMax": 64,
+    "toolTimeoutMs": 120000,
+    "toolTimeouts": {
+      "build_index": 600000,
+      "download_models": 300000
+    }
+  }
+}
+```
+
+### Configuration Options
+
+<ParamField path="mcp.mode" type="string" default="legacy">
+  Transport mode: `legacy`, `sdk`, or `auto`
+</ParamField>
+
+<ParamField path="mcp.maxBufferBytes" type="number" default="8388608">
+  Buffer size limit in bytes (default 8MB). Can also be set via `PAIROFCLEATS_MCP_MAX_BUFFER_BYTES`
+</ParamField>
+
+<ParamField path="mcp.queueMax" type="number" default="64">
+  Maximum number of queued requests. Can also be set via `PAIROFCLEATS_MCP_QUEUE_MAX`
+</ParamField>
+
+<ParamField path="mcp.toolTimeoutMs" type="number" default="120000">
+  Default timeout for tool calls in milliseconds (2 minutes). Can also be set via `PAIROFCLEATS_MCP_TOOL_TIMEOUT_MS`
+</ParamField>
+
+<ParamField path="mcp.toolTimeouts" type="object">
+  Per-tool timeout overrides in milliseconds. Keys are tool names, values are timeout durations.
+</ParamField>
+
+## Request Queue
+
+Requests are queued with a default maximum of 64 concurrent requests:
+
+- When the queue is full, new requests receive a JSON-RPC error `-32001`
+- Error response includes `data.code=QUEUE_OVERLOADED`
+- Increase `mcp.queueMax` or retry later to resolve overload
+
+## Initialize Response
+
+The `initialize` handshake returns:
+
+- `schemaVersion`: SemVer version of the tool schema
+- `toolVersion`: PairOfCleats package version
+- `capabilities.experimental.pairofcleats`: Server capability flags and versions
+
+Example response:
+
+```json
+{
+  "protocolVersion": "2024-11-05",
+  "serverInfo": {
+    "name": "pairofcleats-mcp",
+    "version": "0.0.1"
+  },
+  "capabilities": {
+    "experimental": {
+      "pairofcleats": {
+        "schemaVersion": "1.2.0",
+        "toolVersion": "0.0.1"
+      }
+    }
+  },
+  "schemaVersion": "1.2.0",
+  "toolVersion": "0.0.1"
+}
+```
+
+## Tool Schema Versioning
+
+MCP tool schemas follow semantic versioning:
+
+- **Major bump**: Breaking changes to tool names or input schemas
+- **Minor bump**: Backwards-compatible additions (new tools or parameters)
+- **Patch bump**: Editorial clarifications or fixes
+
+The canonical schema is maintained at `docs/contracts/mcp-tools.schema.json` and validated by `src/integrations/mcp/validate.js`.
+
+## Progress Notifications
+
+Long-running tools emit `notifications/progress` with:
+
+```json
+{
+  "id": 0,
+  "tool": "build_index",
+  "message": "Building code index (working)",
+  "stream": "stdout",
+  "phase": "progress",
+  "ts": "2024-03-04T12:34:56.789Z"
+}
+```
+
+<Note>
+`id=0` is a valid progress notification ID. Only `null` or `undefined` indicates a missing ID.
+</Note>
+
+## Cancellation
+
+Cancel in-flight tool calls using `$/cancelRequest`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "$/cancelRequest",
+  "params": { "id": 123 }
+}
+```
+
+The server aborts the tool execution and returns a cancellation error.
+
+## Output Formats
+
+Tool responses return JSON payloads in `result.content[0].text`:
+
+- Most tools return structured JSON objects
+- `search` defaults to compact JSON; use `output: "full"` for complete payloads
+- Errors return `isError: true` with error details in `content`
+
+## Transport Limitations
+
+- Only stdio transport is currently supported
+- The `mcp.transport` config option is currently ignored
+- HTTP/SSE transport is not yet implemented
+
+## Cache and Repository Path
+
+- Cache location defaults to PairOfCleats cache root
+- Override with `cache.root` config or `PAIROFCLEATS_CACHE_ROOT` environment variable
+- Repo paths are auto-detected from the current working directory
+- Pass explicit `repoPath` parameter when running out-of-tree

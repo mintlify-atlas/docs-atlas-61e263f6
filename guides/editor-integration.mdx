@@ -1,0 +1,219 @@
+---
+title: Editor integration
+description: Integrate PairOfCleats search into VS Code and Sublime Text
+---
+
+PairOfCleats provides native extensions for VS Code and Sublime Text, enabling fast semantic search directly from your editor.
+
+## VS Code extension
+
+The VS Code extension lives in `extensions/vscode` and provides the **PairOfCleats: Search** command.
+
+### Installation
+
+<Steps>
+  <Step title="Package the extension">
+    Build the extension from source:
+    
+    ```bash
+    npm run package-vscode
+    ```
+    
+    This creates `dist/vscode/pairofcleats.vsix`.
+  </Step>
+  
+  <Step title="Install in VS Code">
+    Install the packaged extension:
+    
+    ```bash
+    code --install-extension dist/vscode/pairofcleats.vsix
+    ```
+  </Step>
+  
+  <Step title="Configure settings">
+    Open VS Code settings and configure the extension:
+    
+    - **pairofcleats.cliPath** - Path to pairofcleats CLI (default: `pairofcleats`)
+    - **pairofcleats.searchMode** - Search mode: `code`, `prose`, `all` (default: `code`)
+    - **pairofcleats.searchBackend** - Backend: `auto`, `sqlite`, `lmdb` (default: `auto`)
+    - **pairofcleats.maxResults** - Maximum results to display (default: 50)
+  </Step>
+</Steps>
+
+### Available settings
+
+<ParamField path="pairofcleats.cliPath" type="string" default="pairofcleats">
+  Path to the PairOfCleats CLI executable
+</ParamField>
+
+<ParamField path="pairofcleats.cliArgs" type="array" default="[]">
+  Additional CLI arguments passed to every search command
+</ParamField>
+
+<ParamField path="pairofcleats.searchMode" type="string" default="code">
+  Search mode: `code`, `prose`, `extracted-prose`, `records`, or `all`
+</ParamField>
+
+<ParamField path="pairofcleats.searchBackend" type="string" default="auto">
+  Backend selection: `auto`, `sqlite`, `sqlite-fts`, `lmdb`
+</ParamField>
+
+<ParamField path="pairofcleats.searchAnn" type="string" default="auto">
+  ANN provider: `auto`, `sqlite-vec`, `lancedb`, `hnsw`, `lmdb-ann`
+</ParamField>
+
+<ParamField path="pairofcleats.maxResults" type="number" default="50">
+  Maximum number of results to display
+</ParamField>
+
+<ParamField path="pairofcleats.extraSearchArgs" type="array" default="[]">
+  Extra arguments for advanced search options
+</ParamField>
+
+### Usage
+
+1. Open the command palette (Cmd/Ctrl+Shift+P)
+2. Run **PairOfCleats: Search**
+3. Enter your search query
+4. Results open in a new editor pane with file paths and line numbers
+
+<Tip>
+The extension shells out to the CLI with `--json` flag for structured output.
+</Tip>
+
+## Sublime Text package
+
+The Sublime package lives in `sublime/PairOfCleats` and is packaged as `pairofcleats.sublime-package`.
+
+### Installation
+
+<Steps>
+  <Step title="Package the extension">
+    Build the Sublime package:
+    
+    ```bash
+    npm run package-sublime
+    ```
+    
+    This creates `dist/sublime/pairofcleats.sublime-package`.
+  </Step>
+  
+  <Step title="Install in Sublime Text">
+    Copy the package to your Sublime Text Packages directory:
+    
+    **macOS:**
+    ```bash
+    cp dist/sublime/pairofcleats.sublime-package ~/Library/Application\ Support/Sublime\ Text/Installed\ Packages/
+    ```
+    
+    **Linux:**
+    ```bash
+    cp dist/sublime/pairofcleats.sublime-package ~/.config/sublime-text/Installed\ Packages/
+    ```
+    
+    **Windows:**
+    ```powershell
+    Copy-Item dist/sublime/pairofcleats.sublime-package "$env:APPDATA\Sublime Text\Installed Packages\"
+    ```
+  </Step>
+  
+  <Step title="Configure settings">
+    Open Sublime settings (Preferences → Package Settings → PairOfCleats → Settings) and configure:
+    
+    ```json
+    {
+      "cli_path": "pairofcleats",
+      "search_mode": "code",
+      "max_results": 50
+    }
+    ```
+  </Step>
+</Steps>
+
+### Usage
+
+1. Open the command palette (Cmd/Ctrl+Shift+P)
+2. Run **PairOfCleats: Search**
+3. Enter your search query
+4. Results appear in the quick panel with file paths
+
+## JSON output contract
+
+Both editor extensions expect JSON output from the CLI using the `--json` flag.
+
+### Response structure
+
+```json
+{
+  "code": [...],
+  "prose": [...],
+  "extractedProse": [...],
+  "records": [...],
+  "backend": "sqlite",
+  "stats": { ... },
+  "explain": { ... }
+}
+```
+
+Each bucket contains result objects with:
+- `path` - Relative file path
+- `line` - Line number (1-based)
+- `score` - Relevance score
+- `text` - Matched text excerpt
+
+<Info>
+See the [search contract](/api/contracts/search) for complete schema details.
+</Info>
+
+## Deterministic packaging
+
+Both extension packaging commands produce deterministic builds:
+
+- **Stable file ordering** - Files sorted lexicographically
+- **Normalized timestamps** - Fixed mtime for reproducibility
+- **Consistent archive structure** - Predictable directory layout
+- **SHA-256 checksums** - Integrity verification
+
+### Smoke tests
+
+Verify packaging works before release:
+
+```bash
+# VS Code smoke test
+node tools/package-vscode.js --smoke
+
+# Sublime smoke test
+node tools/package-sublime.js --smoke
+```
+
+### Release manifest
+
+Packaging produces a JSON manifest with checksums:
+
+```json
+{
+  "vscode": {
+    "path": "dist/vscode/pairofcleats.vsix",
+    "sha256": "abc123..."
+  },
+  "sublime": {
+    "path": "dist/sublime/pairofcleats.sublime-package",
+    "sha256": "def456..."
+  }
+}
+```
+
+<Note>
+See `docs/specs/editor-packaging-determinism.md` for complete packaging contract.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Search command" icon="magnifying-glass" href="/cli/search">
+    Learn about search query syntax and flags
+  </Card>
+  <Card title="MCP server" icon="server" href="/guides/mcp-server">
+    Integrate with AI agents via MCP
+  </Card>
+</CardGroup>

@@ -1,0 +1,566 @@
+---
+title: "Search Contract"
+description: "Search query contract, result formats, and explain output for PairOfCleats"
+---
+
+## Overview
+
+This reference defines the search contract for PairOfCleats, including query semantics, ranking models, filter precedence, result formats, and explain payloads.
+
+**Canonical sources:**
+- Contract: `docs/contracts/search-contract.md`
+- CLI contract: `docs/contracts/search-cli.md`
+- Implementation: `src/retrieval/`
+
+## Ranking Components
+
+Search uses a blended ranking model:
+
+- **Sparse (BM25/FTS):** Token-based retrieval over postings
+- **Dense similarity:** Embedding vector search (when enabled)
+- **Minhash similarity:** Near-duplicate detection signals
+- **Symbol boosts:** Definitions and exports (configurable)
+- **Field weights:** `name`, `signature`, `doc`, `comment`, `body`
+
+**Blending strategies:**
+- **RRF (Reciprocal Rank Fusion):** Merge sparse and dense via reciprocal rank
+- **Weighted sum:** Configurable weights for sparse/dense scores
+
+Configuration: `search.rrf`, `search.scoreBlend`
+
+## Filters and Precedence
+
+Filters are applied **before ranking**. All filters are ANDed together unless documented otherwise.
+
+### Supported Filters
+
+**Basic filters:**
+- `--lang <id>` - Language ID
+- `--ext <ext>` - File extension
+- `--file <path>` - Exact file path
+- `--path <pattern>` - File path pattern (regex)
+- `--type <kind>` - Symbol kind
+- `--signature <sig>` - Function signature
+
+**Risk filters:**
+- `--risk` - Has risk signals
+- `--risk-tag <tag>` - Risk tag
+- `--risk-source <name>` - Risk source function
+- `--risk-sink <name>` - Risk sink function
+- `--risk-category <cat>` - Risk category
+- `--risk-flow <id>` - Risk flow ID
+
+**Type filters:**
+- `--inferred-type <type>` - Inferred type annotation
+- `--return-type <type>` - Return type
+- `--param <name>` - Parameter name
+
+**Relation filters:**
+- `--uses <symbol>` - Uses symbol
+- `--calls <fn>` - Calls function
+
+### Filter Ordering
+
+1. **File/path prefilters** (chargram/regex) narrow candidates
+2. **Metadata filters** evaluated before ranking
+3. **Ranking/fusion** within each mode
+4. **Top-N selection** (primary results)
+5. **Context expansion** (optional, post-ranking)
+
+### Top-N Semantics
+
+- `--top <n>` applies **after** ranking/fusion within each mode
+- Pipeline over-fetches to improve fulfillment
+- Returns fewer results when filters or candidate sets are too small
+- Context expansion may append extra hits when enabled
+
+## Multi-Mode Fusion
+
+Search supports multiple modes:
+- `code` - Source code chunks
+- `prose` - Documentation and text
+- `extracted-prose` - Extracted documents (PDF, DOCX)
+- `records` - Structured records
+- `both` - Code + prose
+- `all` - All modes
+
+**Fusion:** Mixed-mode results are fused using RRF by default. Each mode can be weighted independently via config.
+
+## Result Format
+
+### Text Output
+
+Human-readable ranked list. Exact formatting may evolve.
+
+**Flags:**
+- `--matched` - Include matched query tokens
+
+### JSON Output
+
+Machine-readable structured output.
+
+**Flags:**
+- `--json` - Enable JSON output
+- `--compact` - Compact JSON (no pretty-printing)
+- `--stats` - Include stats payload
+- `--explain` - Include score explanation payload
+
+**Basic schema:**
+```json
+{
+  "ok": true,
+  "query": "how does risk explain work",
+  "results": [
+    {
+      "id": "chunk_123",
+      "file": "src/risk/explain.ts",
+      "mode": "code",
+      "score": 0.85,
+      "text": "export function explainRisk(...) { ... }",
+      "start": 1234,
+      "end": 1580,
+      "startLine": 42,
+      "endLine": 58,
+      "kind": "function",
+      "name": "explainRisk"
+    }
+  ]
+}
+```
+
+### Bundle-Style Result Assembly
+
+JSON output includes a deterministic `bundles` object grouping results by file:
+
+```json
+{
+  "bundles": {
+    "schemaVersion": 1,
+    "groups": [
+      {
+        "bundleId": "bundle_001",
+        "file": "src/risk/explain.ts",
+        "hitCount": 3,
+        "totalScore": 2.45,
+        "topScore": 0.95,
+        "modeCount": 2,
+        "modes": ["code", "prose"],
+        "hits": [
+          {
+            "id": "chunk_123",
+            "score": 0.95,
+            "mode": "code"
+          },
+          {
+            "id": "chunk_124",
+            "score": 0.85,
+            "mode": "code"
+          },
+          {
+            "id": "chunk_125",
+            "score": 0.65,
+            "mode": "prose"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Grouping rules:**
+- Primary grouping key: `file`
+- Hits without `file` are isolated into synthetic bundles
+
+**Bundle ordering (deterministic tie-breakers):**
+1. `totalScore` descending
+2. `topScore` descending
+3. `modeCount` descending
+4. `file` lexicographic
+5. `bundleId` lexicographic
+
+**In-bundle hit ordering (deterministic tie-breakers):**
+1. `score` descending
+2. Mode precedence: `code` > `extractedProse` > `prose` > `records`
+3. Source index ascending
+4. Stable text key (`id`)
+
+## Explain Schema
+
+`--explain` emits score and intent diagnostics. Explain payloads are **backend- and profile-dependent**. Consumers must treat explain objects as extensible and ignore unknown keys.
+
+**Stability requirements:**
+- Explain payloads are valid JSON and deterministic for identical inputs
+- Consumers must not assume a fixed `scoreBreakdown` key set
+- Parser compatibility is forward-only: unknown fields are non-breaking
+
+### Basic Explain Payload
+
+```json
+{
+  "results": [
+    {
+      "id": "chunk_123",
+      "score": 0.85,
+      "explain": {
+        "scoreBreakdown": {
+          "sparse": {
+            "bm25": 0.45,
+            "termMatches": ["risk", "explain"],
+            "fieldWeights": {
+              "name": 2.0,
+              "signature": 1.5,
+              "body": 1.0
+            }
+          },
+          "dense": {
+            "similarity": 0.78,
+            "model": "text-embedding-3-small"
+          },
+          "fusion": {
+            "method": "rrf",
+            "k": 60,
+            "sparseRank": 1,
+            "denseRank": 2
+          },
+          "boosts": {
+            "symbolDefinition": 1.2,
+            "exported": 1.1
+          }
+        },
+        "matched": {
+          "tokens": ["risk", "explain"],
+          "positions": [[0, 4], [15, 22]]
+        }
+      }
+    }
+  ]
+}
+```
+
+### Intent Confidence Surface
+
+`stats.intent` carries calibrated confidence for intent classification:
+
+```json
+{
+  "stats": {
+    "intent": {
+      "type": "code",
+      "effectiveType": "code",
+      "confidence": 0.85,
+      "confidenceMargin": 0.35,
+      "confidenceBucket": "high",
+      "confidenceByType": {
+        "code": 0.85,
+        "prose": 0.40,
+        "path": 0.10,
+        "url": 0.05,
+        "mixed": 0.50
+      },
+      "abstain": false,
+      "state": "confident"
+    }
+  }
+}
+```
+
+**Fields:**
+- `type`: Dominant class from intent classification
+- `effectiveType`: Class applied to retrieval knobs
+  - When `confidenceBucket=low`, implementations MUST abstain and set `effectiveType=mixed`
+- `confidenceByType`: Normalized per-class confidence map
+- `confidence`: Selected class confidence
+- `confidenceMargin`: Margin between top two classes
+- `confidenceBucket`: `low`, `medium`, or `high`
+- `abstain`: `true` when confidence is too low
+- `state`: `confident`, `uncertain`, or `abstained`
+
+### Trust Surface Contract
+
+Explain output includes `stats.trust` with calibrated trust signals:
+
+```json
+{
+  "stats": {
+    "trust": {
+      "schemaVersion": 1,
+      "confidence": {
+        "value": 0.92,
+        "margin": 0.42,
+        "bucket": "high",
+        "buckets": {
+          "low": [0, 0.5],
+          "medium": [0.5, 0.8],
+          "high": [0.8, 1.0]
+        }
+      },
+      "signals": {
+        "staleIndex": false,
+        "partialResults": false,
+        "fallbackBackend": false,
+        "lowCoverage": false
+      },
+      "reasonCodes": []
+    }
+  }
+}
+```
+
+**Required fields:**
+- `schemaVersion`: `1`
+- `confidence.value`: Trust confidence score
+- `confidence.margin`: Margin for trust assessment
+- `confidence.bucket`: `low`, `medium`, or `high`
+- `confidence.buckets`: Explicit bucket definitions
+- `signals`: Boolean flags for trust-relevant degradations
+- `reasonCodes`: Machine-readable trust diagnostics
+
+**Reader compatibility:**
+Consumers MUST ignore unknown forward fields in `stats.trust` and continue parsing known fields.
+
+## Phase 11: Graph-Aware Ranking
+
+Graph ranking is an **opt-in** reordering step using bounded graph-derived features.
+
+### Membership Invariant (Required)
+
+With graph ranking enabled:
+1. Search MUST compute baseline result set (`topN`) without graph features
+2. Graph ranking may **reorder only** those results
+3. Returned result membership MUST be identical with graph ranking off/on
+
+### Configuration
+
+**Config keys:**
+- `retrieval.graphRanking.enabled` (boolean)
+- `retrieval.graphRanking.weights` (object: `degree`, `proximity`)
+- `retrieval.graphRanking.maxGraphWorkUnits` (number)
+- `retrieval.graphRanking.maxWallClockMs` (number, optional)
+- `retrieval.graphRanking.seedSelection` (`top1`, `topK`, or `none`)
+- `retrieval.graphRanking.seedK` (number, for `topK` mode)
+
+**CLI overrides:**
+- `--graph-ranking-max-work <n>`
+- `--graph-ranking-max-ms <n>`
+- `--graph-ranking-seeds top1|topK|none`
+- `--graph-ranking-seed-k <n>`
+
+### Graph Ranking Explain Payload
+
+When `--explain` is enabled and graph ranking is active:
+
+```json
+{
+  "scoreBreakdown": {
+    "baseline": {
+      "sparse": 0.45,
+      "dense": 0.78
+    },
+    "graph": {
+      "score": 0.123,
+      "degree": 8,
+      "proximity": 0.5,
+      "weights": {
+        "degree": 0.1,
+        "proximity": 0.4
+      },
+      "seedSelection": "top1",
+      "seedK": null
+    }
+  }
+}
+```
+
+**Graph explain fields:**
+- `score`: Additive score applied for graph-aware reordering
+- `degree`: Node degree in call/usage graph
+- `proximity`: Distance from seed nodes
+- `weights`: Applied weights for degree and proximity
+- `seedSelection`: Seed selection strategy (`top1`, `topK`, or `none`)
+- `seedK`: Seed K value (for `topK` mode)
+
+## Phase 11: Context Expansion
+
+Context expansion is an **optional**, **post-ranking** step that may append additional context hits.
+
+### Requirements
+
+- Opt-in (default off)
+- Bounded by explicit caps:
+  - `maxPerHit`: Max context hits per primary result
+  - `maxTotal`: Max total context hits
+  - Per-source caps
+  - `maxWorkUnits`: Work budget
+- Records truncation metadata when caps trigger
+- Deterministic ordering
+
+### Configuration
+
+**Config keys:**
+- `retrieval.contextExpansion.enabled` (boolean)
+- `retrieval.contextExpansion.maxPerHit` (number)
+- `retrieval.contextExpansion.maxTotal` (number)
+- `retrieval.contextExpansion.maxWorkUnits` (number)
+
+**Identity-first joins:**
+When graph artifacts exist, context expansion MUST prefer identity-first joins (use `chunkUid`, `symbolId`) over heuristic proximity.
+
+## CLI Reference
+
+### Basic Usage
+
+```bash
+pairofcleats search "query string"
+search.js "query string"
+```
+
+### Common Flags
+
+```bash
+# Mode selection
+--mode code|prose|extracted-prose|records|both|all
+
+# Result count
+--top 20
+--top-per-repo 10
+
+# Output format
+--json
+--compact
+--stats
+--explain
+--matched
+
+# Filters
+--file "src/index.ts"
+--path "src/**/*.ts"
+--lang typescript
+--ext ts
+--type function
+--signature "(a: number): string"
+
+# Backend selection
+--backend auto|sqlite|sqlite-fts|lmdb|memory|tantivy
+--ann / --no-ann
+--ann-backend auto|lancedb|sqlite|hnsw|js
+
+# Ranking tuning
+--bm25-k1 1.2
+--bm25-b 0.75
+--rrf-k 60
+
+# Graph ranking (Phase 11)
+--graph-ranking-max-work 10000
+--graph-ranking-max-ms 500
+--graph-ranking-seeds top1
+--graph-ranking-seed-k 5
+```
+
+### Filter Expression
+
+`--filter` accepts space- or comma-separated tokens:
+
+```bash
+--filter "file:src/index.ts lang:typescript ext:ts"
+--filter "typescript, src/**/*.ts, function"
+```
+
+Supported keys: `file`, `path`, `lang`, `ext`, `type`/`kind`. Tokens without a key are treated as file/path filters.
+
+### Federated Search
+
+```bash
+--workspace ~/workspace/manifest.json
+--cohort production
+--federated-strict
+--repo-filter "include:core-*,exclude:test-*"
+--include-disabled
+--tag v1.0
+```
+
+## Backend Selection
+
+PairOfCleats supports multiple search backends:
+
+- `auto` - Automatic selection based on available artifacts
+- `sqlite` / `sqlite-fts` - SQLite full-text search
+- `lmdb` - LMDB memory-mapped storage
+- `memory` - In-memory index (testing)
+- `tantivy` - Tantivy search engine (experimental)
+
+**ANN backends:**
+- `auto` - Automatic selection
+- `lancedb` - LanceDB vector store
+- `sqlite` - SQLite-vec extension
+- `hnsw` - HNSW binary index
+- `js` - JavaScript HNSW implementation
+
+## Examples
+
+### Basic Search
+
+```bash
+# Code search
+pairofcleats search "function to parse config"
+
+# Prose search
+pairofcleats search --mode prose "how to install"
+
+# Multi-mode search
+pairofcleats search --mode all "authentication"
+```
+
+### Filtered Search
+
+```bash
+# TypeScript functions only
+pairofcleats search --lang typescript --type function "parse config"
+
+# Specific file
+pairofcleats search --file "src/config.ts" "parse"
+
+# Path pattern
+pairofcleats search --path "src/utils/**/*.ts" "helper"
+```
+
+### JSON Output with Explain
+
+```bash
+pairofcleats search --json --explain --stats "risk analysis" > results.json
+```
+
+### Risk-Aware Search
+
+```bash
+# Find risky functions
+pairofcleats search --risk "database query"
+
+# Specific risk category
+pairofcleats search --risk-category "sql-injection" "query"
+
+# Risk sources
+pairofcleats search --risk-source "userInput" "process"
+```
+
+### Graph-Aware Search (Phase 11)
+
+```bash
+# Enable graph ranking with work budget
+pairofcleats search \
+  --graph-ranking-max-work 5000 \
+  --graph-ranking-seeds top1 \
+  --explain \
+  "http handler"
+```
+
+### Federated Search
+
+```bash
+# Search across workspace
+pairofcleats search \
+  --workspace ~/workspace/manifest.json \
+  --cohort production \
+  --top-per-repo 5 \
+  "authentication"
+```

@@ -1,0 +1,353 @@
+---
+title: Service Commands
+description: Run API server and indexer services
+---
+
+## pairofcleats service api
+
+Run local HTTP JSON API server.
+
+```bash
+pairofcleats service api [options]
+```
+
+### Description
+
+Starts a local HTTP server providing JSON API endpoints for:
+- Search queries
+- Index status
+- Repository information
+- Configuration access
+
+### Server Options
+
+<ParamField path="--host" type="string" default="127.0.0.1">
+  Server bind address
+</ParamField>
+
+<ParamField path="--port" type="string" default="7345">
+  Server port number
+</ParamField>
+
+### Output Options
+
+<ParamField path="--output" type="string" default="compact">
+  Log output format
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Enable JSON logging
+</ParamField>
+
+<ParamField path="--quiet" type="boolean" default="false">
+  Suppress non-error output
+</ParamField>
+
+### Repository Options
+
+<ParamField path="--repo" type="string">
+  Repository root path to serve
+</ParamField>
+
+### Security Options
+
+<ParamField path="--auth-token" type="string">
+  Required authentication token for API access
+</ParamField>
+
+<ParamField path="--allow-unauthenticated" type="boolean" default="false">
+  Allow unauthenticated requests (development only)
+</ParamField>
+
+### CORS Options
+
+<ParamField path="--cors-allowed-origins" type="string">
+  Comma-separated list of allowed CORS origins
+</ParamField>
+
+<ParamField path="--cors-allow-any" type="boolean" default="false">
+  Allow requests from any origin (development only)
+</ParamField>
+
+### Access Control
+
+<ParamField path="--allowed-repo-roots" type="string">
+  Comma-separated list of allowed repository root paths
+</ParamField>
+
+<ParamField path="--max-body-bytes" type="number">
+  Maximum request body size in bytes
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Basic Server
+# Start API server with defaults
+pairofcleats service api
+```
+
+```bash Custom Port
+# Run on custom port
+pairofcleats service api --port 8080
+```
+
+```bash With Authentication
+# Require auth token
+pairofcleats service api --auth-token "secret-token-here"
+```
+
+```bash Development Mode
+# Allow unauthenticated access (local dev only)
+pairofcleats service api --allow-unauthenticated --cors-allow-any
+```
+
+```bash Production
+# Secure production setup
+pairofcleats service api \
+  --host 0.0.0.0 \
+  --port 7345 \
+  --auth-token "$API_TOKEN" \
+  --cors-allowed-origins "https://app.example.com" \
+  --allowed-repo-roots "/var/repos"
+```
+
+</CodeGroup>
+
+### API Endpoints
+
+Once running, the API provides these endpoints:
+
+#### POST /search
+
+Search indexed repositories.
+
+```bash
+curl -X POST http://localhost:7345/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "authentication", "mode": "code"}'
+```
+
+#### GET /status
+
+Get server and index status.
+
+```bash
+curl http://localhost:7345/status
+```
+
+#### GET /health
+
+Health check endpoint.
+
+```bash
+curl http://localhost:7345/health
+```
+
+### Authentication
+
+When `--auth-token` is set, include it in requests:
+
+```bash
+curl -X POST http://localhost:7345/search \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "test"}'
+```
+
+---
+
+## pairofcleats service indexer
+
+Run indexer service for background index builds.
+
+```bash
+pairofcleats service indexer [options]
+```
+
+### Description
+
+Runs a long-lived indexer service that:
+- Watches for repository changes
+- Processes indexing queue
+- Handles incremental rebuilds
+- Manages build scheduling
+
+### Configuration
+
+<ParamField path="--config" type="string">
+  Path to indexer service configuration file
+</ParamField>
+
+<ParamField path="--repo" type="string">
+  Repository root to monitor
+</ParamField>
+
+### Index Options
+
+<ParamField path="--mode" type="string" default="all">
+  Index modes to build: `code`, `prose`, `records`, or `all`
+</ParamField>
+
+<ParamField path="--reason" type="string">
+  Reason for index build (logged for debugging)
+</ParamField>
+
+<ParamField path="--stage" type="string">
+  Start at specific build stage
+</ParamField>
+
+<ParamField path="--command" type="string">
+  Command to execute: `build`, `watch`, or `queue`
+</ParamField>
+
+### Service Options
+
+<ParamField path="--watch" type="boolean" default="false">
+  Enable file watching mode
+</ParamField>
+
+<ParamField path="--interval" type="number">
+  Polling interval in milliseconds
+</ParamField>
+
+<ParamField path="--concurrency" type="number">
+  Maximum concurrent build workers
+</ParamField>
+
+### Queue Options
+
+<ParamField path="--queue" type="string" default="index">
+  Queue name to process
+</ParamField>
+
+### Output
+
+<ParamField path="--json" type="boolean" default="false">
+  Enable JSON logging format
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Watch Mode
+# Watch for changes and rebuild
+pairofcleats service indexer --watch --repo /path/to/repo
+```
+
+```bash Queue Worker
+# Process indexing queue
+pairofcleats service indexer --command queue --concurrency 4
+```
+
+```bash Custom Interval
+# Poll every 10 seconds
+pairofcleats service indexer --watch --interval 10000
+```
+
+```bash JSON Logging
+# Structured logging for monitoring
+pairofcleats service indexer --watch --json
+```
+
+</CodeGroup>
+
+### Service Modes
+
+#### Watch Mode
+
+Continuously monitors repository for changes:
+
+```bash
+pairofcleats service indexer --watch --mode code
+```
+
+Use for:
+- Development environments
+- Auto-rebuilding on file changes
+- Keeping indexes fresh
+
+#### Queue Mode
+
+Processes indexing jobs from a queue:
+
+```bash
+pairofcleats service indexer --command queue --concurrency 2
+```
+
+Use for:
+- Production indexing pipelines
+- Multi-repository setups
+- Distributed indexing
+
+### Configuration File
+
+Indexer service can be configured via JSON:
+
+```json
+{
+  "repos": [
+    {
+      "path": "/path/to/repo1",
+      "modes": ["code", "prose"],
+      "watch": true
+    },
+    {
+      "path": "/path/to/repo2",
+      "modes": ["code"],
+      "watch": false
+    }
+  ],
+  "concurrency": 4,
+  "interval": 5000
+}
+```
+
+Use with:
+
+```bash
+pairofcleats service indexer --config indexer-config.json
+```
+
+### Monitoring
+
+With `--json`, service emits structured logs:
+
+```json
+{
+  "level": "info",
+  "msg": "indexer service started",
+  "mode": "all",
+  "watch": true,
+  "timestamp": "2026-03-04T12:00:00.000Z"
+}
+```
+
+### Process Management
+
+Run as daemon with systemd:
+
+```ini
+[Unit]
+Description=PairOfCleats Indexer Service
+After=network.target
+
+[Service]
+Type=simple
+User=indexer
+ExecStart=/usr/local/bin/pairofcleats service indexer --watch --json
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Or with Docker:
+
+```dockerfile
+FROM node:20
+RUN npm install -g pairofcleats
+CMD ["pairofcleats", "service", "indexer", "--watch", "--json"]
+```

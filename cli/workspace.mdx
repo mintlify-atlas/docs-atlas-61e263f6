@@ -1,0 +1,385 @@
+---
+title: Workspace Commands
+description: Multi-repository workspace management
+---
+
+## pairofcleats workspace manifest
+
+Generate or refresh workspace manifest.
+
+```bash
+pairofcleats workspace manifest --workspace <path> [options]
+```
+
+### Description
+
+Generates a workspace manifest containing:
+- Repository inventory
+- Index availability per repo
+- Repository metadata
+- Workspace hash and ID
+
+### Options
+
+<ParamField path="--workspace" type="string" required>
+  Path to workspace configuration file (`.jsonc`)
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output manifest as JSON
+</ParamField>
+
+### Examples
+
+```bash
+# Generate manifest
+pairofcleats workspace manifest --workspace workspace.jsonc
+
+# Output as JSON
+pairofcleats workspace manifest --workspace workspace.jsonc --json
+```
+
+### Workspace Configuration
+
+The workspace file defines multiple repositories:
+
+```json
+{
+  "repos": [
+    {
+      "repoId": "frontend",
+      "path": "./packages/frontend",
+      "enabled": true
+    },
+    {
+      "repoId": "backend",
+      "path": "./packages/backend",
+      "enabled": true
+    },
+    {
+      "repoId": "legacy",
+      "path": "./packages/legacy",
+      "enabled": false
+    }
+  ]
+}
+```
+
+### Output
+
+The manifest includes:
+
+```json
+{
+  "workspacePath": "/path/to/workspace.jsonc",
+  "repoSetId": "workspace-abc123",
+  "manifestHash": "sha256:...",
+  "repos": [
+    {
+      "repoId": "frontend",
+      "repoRootCanonical": "/path/to/packages/frontend",
+      "enabled": true,
+      "indexes": {
+        "code": { "ready": true },
+        "prose": { "ready": true }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## pairofcleats workspace status
+
+Show workspace repository and index status.
+
+```bash
+pairofcleats workspace status --workspace <path> [options]
+```
+
+### Description
+
+Displays current status of all repositories in workspace:
+- Repository availability
+- Index readiness per mode
+- Last build timestamps
+- Error states
+
+### Options
+
+<ParamField path="--workspace" type="string" required>
+  Path to workspace configuration file
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output status as JSON
+</ParamField>
+
+### Examples
+
+<CodeGroup>
+
+```bash Status Report
+# Show workspace status
+pairofcleats workspace status --workspace workspace.jsonc
+```
+
+```bash JSON Output
+# Get structured status
+pairofcleats workspace status --workspace workspace.jsonc --json
+```
+
+</CodeGroup>
+
+### Output Format
+
+```
+Workspace: /path/to/workspace.jsonc
+Repositories: 3 total, 2 enabled
+
+frontend:
+  path: ./packages/frontend
+  enabled: yes
+  indexes:
+    code: ready
+    prose: ready
+
+backend:
+  path: ./packages/backend
+  enabled: yes
+  indexes:
+    code: ready
+    prose: not built
+
+legacy:
+  path: ./packages/legacy
+  enabled: no
+```
+
+---
+
+## pairofcleats workspace build
+
+Build indexes across all workspace repositories.
+
+```bash
+pairofcleats workspace build --workspace <path> [options] [build flags]
+```
+
+### Description
+
+Builds indexes for all enabled repositories in the workspace with:
+- Parallel builds across repositories
+- Shared build configuration
+- Failure handling strategies
+- Automatic manifest generation
+
+### Workspace Options
+
+<ParamField path="--workspace" type="string" required>
+  Path to workspace configuration file
+</ParamField>
+
+<ParamField path="--concurrency" type="number" default="2">
+  Maximum concurrent repository builds (1-32)
+</ParamField>
+
+<ParamField path="--strict" type="boolean">
+  Stop scheduling new builds after first failure
+</ParamField>
+
+<ParamField path="--include-disabled" type="boolean">
+  Include disabled repositories from workspace
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Emit JSON summary of build results
+</ParamField>
+
+### Build Flags
+
+All `pairofcleats index build` flags are supported (except `--repo`):
+
+- `--mode` - Index mode to build
+- `--incremental` - Enable incremental builds
+- `--stub-embeddings` - Use stub embeddings
+- `--quality` - Quality preset
+- `--stage` - Start at specific stage
+- And more (see [Index Commands](/cli/index))
+
+### Examples
+
+<CodeGroup>
+
+```bash Basic Build
+# Build all repos with defaults
+pairofcleats workspace build --workspace workspace.jsonc
+```
+
+```bash Parallel Builds
+# Build 4 repos concurrently
+pairofcleats workspace build --workspace workspace.jsonc --concurrency 4
+```
+
+```bash Code Only
+# Build code indexes only
+pairofcleats workspace build --workspace workspace.jsonc --mode code
+```
+
+```bash Incremental
+# Incremental builds across workspace
+pairofcleats workspace build --workspace workspace.jsonc --incremental
+```
+
+```bash Strict Mode
+# Stop on first failure
+pairofcleats workspace build --workspace workspace.jsonc --strict
+```
+
+```bash Include All
+# Build disabled repos too
+pairofcleats workspace build --workspace workspace.jsonc --include-disabled
+```
+
+```bash JSON Output
+# Get structured results
+pairofcleats workspace build --workspace workspace.jsonc --json
+```
+
+</CodeGroup>
+
+### Build Process
+
+1. **Load workspace** - Parse configuration and validate repos
+2. **Filter repos** - Select enabled repos (unless `--include-disabled`)
+3. **Schedule builds** - Queue repos for parallel building
+4. **Execute builds** - Run `index build` for each repo
+5. **Generate manifest** - Create/update workspace manifest
+6. **Report results** - Display success/failure summary
+
+### Output Format
+
+#### Console Output
+
+```
+Workspace build complete
+- workspace: /path/to/workspace.jsonc
+- repos built: 3
+- repos failed: 0
+- manifest: /path/to/.pairofcleats/workspace-manifest.json
+- repoSetId: workspace-abc123
+- manifestHash: sha256:def456
+
+  - frontend: passed (45000ms)
+  - backend: passed (52000ms)
+  - shared: passed (12000ms)
+```
+
+#### JSON Output
+
+```json
+{
+  "ok": true,
+  "workspacePath": "/path/to/workspace.jsonc",
+  "manifestPath": "/path/to/.pairofcleats/workspace-manifest.json",
+  "repoSetId": "workspace-abc123",
+  "manifestHash": "sha256:def456",
+  "diagnostics": {
+    "total": 3,
+    "failed": 0,
+    "entries": [
+      {
+        "repoId": "frontend",
+        "repoRootCanonical": "/path/to/packages/frontend",
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 45000,
+        "status": "passed",
+        "error": null
+      }
+    ]
+  }
+}
+```
+
+### Error Handling
+
+#### Continue on Failure (default)
+
+```bash
+pairofcleats workspace build --workspace workspace.jsonc
+```
+
+- Builds all repos regardless of individual failures
+- Reports all errors at the end
+- Exit code 1 if any repo failed
+
+#### Strict Mode
+
+```bash
+pairofcleats workspace build --workspace workspace.jsonc --strict
+```
+
+- Stops scheduling new builds after first failure
+- Running builds complete
+- Faster failure detection
+
+### Concurrency
+
+Control parallelism based on resources:
+
+```bash
+# Low resource environments
+pairofcleats workspace build --workspace workspace.jsonc --concurrency 1
+
+# High resource environments  
+pairofcleats workspace build --workspace workspace.jsonc --concurrency 8
+```
+
+Max concurrency is 32.
+
+---
+
+## pairofcleats workspace catalog
+
+Inspect workspace cache and manifests (debug).
+
+```bash
+pairofcleats workspace catalog --workspace <path> [options]
+```
+
+### Description
+
+Diagnostic command that shows:
+- Workspace cache structure
+- Manifest files
+- Index artifact locations
+- Cache statistics
+
+### Options
+
+<ParamField path="--workspace" type="string" required>
+  Path to workspace configuration file
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output catalog as JSON
+</ParamField>
+
+### Examples
+
+```bash
+# Show workspace catalog
+pairofcleats workspace catalog --workspace workspace.jsonc
+
+# JSON format
+pairofcleats workspace catalog --workspace workspace.jsonc --json
+```
+
+### Use Cases
+
+- Debug workspace setup issues
+- Verify cache structure
+- Inspect manifest contents
+- Troubleshoot missing artifacts

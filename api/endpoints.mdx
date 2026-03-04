@@ -1,0 +1,967 @@
+---
+title: API Endpoints
+description: Complete reference for all HTTP endpoints in the PairOfCleats API
+---
+
+## Health Check
+
+### `GET /health`
+
+Returns a heartbeat payload with server uptime.
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="uptimeMs" type="number">
+  Server uptime in milliseconds
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/health
+```
+
+```json
+{
+  "ok": true,
+  "uptimeMs": 12345
+}
+```
+
+## Status
+
+### `GET /status`
+
+Reports artifact sizes and cache health using the core status payload.
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override (requires `--allowed-repo-roots`)
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="status" type="object">
+  Core status payload with artifact information
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/status
+```
+
+```json
+{
+  "ok": true,
+  "status": {
+    "artifacts": {
+      "code": { "size": 1024000, "timestamp": "2026-03-04T10:30:00.000Z" },
+      "prose": { "size": 512000, "timestamp": "2026-03-04T10:30:00.000Z" }
+    }
+  }
+}
+```
+
+### `GET /status/stream`
+
+Streams status as Server-Sent Events (SSE).
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override
+</ParamField>
+
+**Events**
+
+- `start`: `{ ok: true, repo: "/path/to/repo" }`
+- `result`: `{ ok: true, repo: "/path/to/repo", status: {...} }`
+- `error`: `{ ok: false, code: "ERROR_CODE", message: "..." }`
+- `done`: `{ ok: true }` or `{ ok: false }`
+
+**Example**
+
+```bash
+curl -N http://127.0.0.1:7345/status/stream
+```
+
+## Metrics
+
+### `GET /metrics`
+
+Returns Prometheus metrics for the API server.
+
+**Response**
+
+Returns metrics in Prometheus text format:
+
+```text
+# HELP pairofcleats_search_requests_total Total search requests
+# TYPE pairofcleats_search_requests_total counter
+pairofcleats_search_requests_total 42
+```
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/metrics
+```
+
+## Search
+
+### `POST /search`
+
+Executes a search query and returns results.
+
+**Request Body**
+
+<ParamField body="query" type="string" required>
+  Search query (non-empty string)
+</ParamField>
+
+<ParamField body="repo" type="string">
+  Repository path (alias: `repoPath`)
+</ParamField>
+
+<ParamField body="output" type="string" default="compact">
+  Output format: `compact`, `json`, or `full`
+</ParamField>
+
+<ParamField body="mode" type="string" default="code">
+  Search mode: `code`, `prose`, `records`, `both`, `all`, or `extracted-prose`
+</ParamField>
+
+<ParamField body="backend" type="string" default="auto">
+  Storage backend: `auto`, `memory`, `sqlite`, `sqlite-fts`, or `lmdb`
+</ParamField>
+
+<ParamField body="ann" type="boolean">
+  Enable approximate nearest neighbor (ANN) semantic search
+</ParamField>
+
+<ParamField body="top" type="integer">
+  Maximum number of results to return (minimum: 0)
+</ParamField>
+
+<ParamField body="context" type="integer">
+  Number of context lines around matches (minimum: 0)
+</ParamField>
+
+#### Filter Parameters
+
+<ParamField body="type" type="string">
+  Filter by symbol type (e.g., `function`, `class`, `variable`)
+</ParamField>
+
+<ParamField body="author" type="string">
+  Filter by git author
+</ParamField>
+
+<ParamField body="path" type="string | string[]">
+  Filter by file path pattern
+</ParamField>
+
+<ParamField body="file" type="string | string[]">
+  Filter by filename pattern
+</ParamField>
+
+<ParamField body="ext" type="string | string[]">
+  Filter by file extension
+</ParamField>
+
+<ParamField body="lang" type="string">
+  Filter by programming language
+</ParamField>
+
+<ParamField body="visibility" type="string">
+  Filter by visibility (e.g., `public`, `private`)
+</ParamField>
+
+<ParamField body="extends" type="string">
+  Filter by parent class or interface
+</ParamField>
+
+<ParamField body="branch" type="string">
+  Filter by git branch
+</ParamField>
+
+#### Code Analysis Filters
+
+<ParamField body="import" type="string">
+  Filter by import statement
+</ParamField>
+
+<ParamField body="calls" type="string">
+  Filter by function calls
+</ParamField>
+
+<ParamField body="uses" type="string">
+  Filter by symbol usage
+</ParamField>
+
+<ParamField body="signature" type="string">
+  Filter by function signature
+</ParamField>
+
+<ParamField body="param" type="string">
+  Filter by parameter name
+</ParamField>
+
+<ParamField body="decorator" type="string">
+  Filter by decorator
+</ParamField>
+
+<ParamField body="inferredType" type="string">
+  Filter by inferred type
+</ParamField>
+
+<ParamField body="returnType" type="string">
+  Filter by return type
+</ParamField>
+
+<ParamField body="throws" type="string">
+  Filter by exception type
+</ParamField>
+
+<ParamField body="reads" type="string">
+  Filter by variable reads
+</ParamField>
+
+<ParamField body="writes" type="string">
+  Filter by variable writes
+</ParamField>
+
+<ParamField body="mutates" type="string">
+  Filter by mutation operations
+</ParamField>
+
+<ParamField body="alias" type="string">
+  Filter by aliased symbols
+</ParamField>
+
+<ParamField body="awaits" type="string">
+  Filter by awaited promises
+</ParamField>
+
+#### Risk Analysis Filters
+
+<ParamField body="risk" type="string">
+  Filter by risk level
+</ParamField>
+
+<ParamField body="riskTag" type="string">
+  Filter by risk tag
+</ParamField>
+
+<ParamField body="riskSource" type="string">
+  Filter by risk source
+</ParamField>
+
+<ParamField body="riskSink" type="string">
+  Filter by risk sink
+</ParamField>
+
+<ParamField body="riskCategory" type="string">
+  Filter by risk category
+</ParamField>
+
+<ParamField body="riskFlow" type="string">
+  Filter by risk flow
+</ParamField>
+
+#### Complexity Filters
+
+<ParamField body="branchesMin" type="integer">
+  Minimum number of branches (minimum: 0)
+</ParamField>
+
+<ParamField body="loopsMin" type="integer">
+  Minimum number of loops (minimum: 0)
+</ParamField>
+
+<ParamField body="breaksMin" type="integer">
+  Minimum number of break statements (minimum: 0)
+</ParamField>
+
+<ParamField body="continuesMin" type="integer">
+  Minimum number of continue statements (minimum: 0)
+</ParamField>
+
+<ParamField body="churnMin" type="integer">
+  Minimum code churn (minimum: 0)
+</ParamField>
+
+#### Git History Filters
+
+<ParamField body="chunkAuthor" type="string">
+  Filter by chunk author
+</ParamField>
+
+<ParamField body="modifiedAfter" type="string">
+  Filter by modification date (ISO 8601 string)
+</ParamField>
+
+<ParamField body="modifiedSince" type="integer">
+  Filter by modification time (Unix timestamp)
+</ParamField>
+
+#### Boolean Flags
+
+<ParamField body="lint" type="boolean">
+  Include lint annotations
+</ParamField>
+
+<ParamField body="async" type="boolean">
+  Filter async functions
+</ParamField>
+
+<ParamField body="generator" type="boolean">
+  Filter generator functions
+</ParamField>
+
+<ParamField body="returns" type="boolean">
+  Filter functions with return statements
+</ParamField>
+
+<ParamField body="case" type="boolean">
+  Case-sensitive matching
+</ParamField>
+
+<ParamField body="caseFile" type="boolean">
+  Case-sensitive file matching
+</ParamField>
+
+<ParamField body="caseTokens" type="boolean">
+  Case-sensitive token matching
+</ParamField>
+
+#### Metadata Filters
+
+<ParamField body="meta" type="string | array | object">
+  Flexible metadata filter (string, array, or object)
+</ParamField>
+
+<ParamField body="metaJson" type="any">
+  JSON metadata filter
+</ParamField>
+
+#### Snapshot Parameters
+
+<ParamField body="asOf" type="string">
+  Search as of a specific point in time
+</ParamField>
+
+<ParamField body="snapshot" type="string">
+  Search against a specific snapshot
+</ParamField>
+
+<ParamField body="snapshotId" type="string">
+  Snapshot identifier
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Search results organized by mode
+  
+  <ResponseField name="result.code" type="array">
+    Code search results
+  </ResponseField>
+  
+  <ResponseField name="result.prose" type="array">
+    Prose search results
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication",
+    "mode": "code",
+    "type": "function",
+    "top": 10
+  }'
+```
+
+```json
+{
+  "ok": true,
+  "result": {
+    "code": [
+      {
+        "file": "src/auth/login.js",
+        "line": 42,
+        "content": "function authenticate(user, password) { ... }",
+        "score": 0.95
+      }
+    ],
+    "prose": []
+  }
+}
+```
+
+### `GET /search`
+
+Executes a search query using query parameters (alternative to POST).
+
+**Query Parameters**
+
+Accepts the same parameters as `POST /search` but via URL query string:
+
+<ParamField query="query" type="string" required>
+  Search query
+</ParamField>
+
+<ParamField query="mode" type="string">
+  Search mode: `code`, `prose`, `records`, `both`, `all`, or `extracted-prose`
+</ParamField>
+
+<ParamField query="type" type="string">
+  Filter by symbol type
+</ParamField>
+
+<ParamField query="top" type="integer">
+  Maximum number of results
+</ParamField>
+
+**Example**
+
+```bash
+curl "http://127.0.0.1:7345/search?query=authentication&mode=code&type=function&top=10"
+```
+
+### `POST /search/stream`
+
+Streams search progress and results as Server-Sent Events (SSE).
+
+**Request Body**
+
+Same as `POST /search`.
+
+**Events**
+
+- `start`: `{ ok: true }`
+- `progress`: `{ ok: true, phase: "search", message: "Searching..." }`
+- `result`: `{ ok: true, result: {...} }`
+- `error`: `{ ok: false, code: "ERROR_CODE", message: "..." }`
+- `done`: `{ ok: true }` or `{ ok: false }`
+
+**Example**
+
+```bash
+curl -N http://127.0.0.1:7345/search/stream \
+  -H "Content-Type: application/json" \
+  -d '{"query":"return","mode":"code"}'
+```
+
+Response:
+```text
+event: start
+data: {"ok":true}
+
+event: progress
+data: {"ok":true,"phase":"search","message":"Running search."}
+
+event: result
+data: {"ok":true,"result":{"code":[...]}}
+
+event: done
+data: {"ok":true}
+```
+
+### `POST /search/federated`
+
+Executes a federated search across multiple repositories in a workspace.
+
+**Request Body**
+
+<ParamField body="query" type="string" required>
+  Search query (non-empty string)
+</ParamField>
+
+<ParamField body="workspacePath" type="string" required>
+  Path to workspace configuration (must be allowlisted)
+</ParamField>
+
+<ParamField body="workspaceId" type="string">
+  Must match resolved workspace `repoSetId` when provided
+</ParamField>
+
+<ParamField body="search" type="object">
+  Search parameters (same as single-repo search)
+</ParamField>
+
+<ParamField body="select" type="object">
+  Repository selection criteria
+  
+  <ParamField body="select.repos" type="string | string[]">
+    Repository filter patterns
+  </ParamField>
+  
+  <ParamField body="select.tags" type="string | string[]">
+    Filter by repository tags
+  </ParamField>
+  
+  <ParamField body="select.includeDisabled" type="boolean">
+    Include disabled repositories
+  </ParamField>
+</ParamField>
+
+<ParamField body="merge" type="object">
+  Result merging strategy
+  
+  <ParamField body="merge.strategy" type="string" default="rrf">
+    Merge strategy: `rrf` (Reciprocal Rank Fusion)
+  </ParamField>
+  
+  <ParamField body="merge.rrfK" type="integer" default="60">
+    RRF constant (minimum: 1)
+  </ParamField>
+</ParamField>
+
+<ParamField body="limits" type="object">
+  Execution limits
+  
+  <ParamField body="limits.perRepoTop" type="integer">
+    Maximum results per repository (minimum: 0)
+  </ParamField>
+  
+  <ParamField body="limits.concurrency" type="integer">
+    Maximum concurrent repository searches (minimum: 1)
+  </ParamField>
+</ParamField>
+
+<ParamField body="cohorts" type="object">
+  Cohort configuration
+  
+  <ParamField body="cohorts.policy" type="string" default="default">
+    Cohort policy: `default` or `strict`
+  </ParamField>
+  
+  <ParamField body="cohorts.cohort" type="string | string[]">
+    Cohort selectors
+  </ParamField>
+  
+  <ParamField body="cohorts.allowUnsafeMix" type="boolean">
+    Allow mixing different cohorts
+  </ParamField>
+</ParamField>
+
+<ParamField body="cohort" type="string | string[]">
+  Shorthand for cohort selectors
+</ParamField>
+
+<ParamField body="allowUnsafeMix" type="boolean">
+  Shorthand for allowing unsafe cohort mixing
+</ParamField>
+
+<ParamField body="strict" type="boolean">
+  Enable strict mode
+</ParamField>
+
+<ParamField body="debug" type="object">
+  Debug options
+  
+  <ParamField body="debug.includePaths" type="boolean">
+    Include file paths in debug output
+  </ParamField>
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="backend" type="string">
+  Always `"federated"` for federated searches
+</ResponseField>
+
+<ResponseField name="results" type="object">
+  Merged results from all repositories
+</ResponseField>
+
+<ResponseField name="diagnostics" type="object">
+  Per-repository diagnostics and statistics
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/search/federated \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication",
+    "workspacePath": "/path/to/workspace",
+    "select": {
+      "tags": ["backend", "security"]
+    },
+    "limits": {
+      "perRepoTop": 5,
+      "concurrency": 3
+    }
+  }'
+```
+
+## Index Snapshots
+
+### `GET /index/snapshots`
+
+Lists all available index snapshots.
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="snapshots" type="array">
+  Array of snapshot objects
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/index/snapshots
+```
+
+```json
+{
+  "ok": true,
+  "snapshots": [
+    {
+      "id": "2026-03-04T10:30:00.000Z",
+      "label": "before-refactor",
+      "tags": ["stable"],
+      "modes": ["code", "prose"],
+      "timestamp": "2026-03-04T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+### `POST /index/snapshots`
+
+Creates a new index snapshot.
+
+**Request Body**
+
+<ParamField body="repo" type="string">
+  Repository path (alias: `repoPath`)
+</ParamField>
+
+<ParamField body="label" type="string">
+  Human-readable snapshot label
+</ParamField>
+
+<ParamField body="tags" type="string | string[]">
+  Snapshot tags for categorization
+</ParamField>
+
+<ParamField body="modes" type="string | string[]">
+  Index modes to snapshot: `code`, `prose`, `records`
+</ParamField>
+
+<ParamField body="snapshotId" type="string">
+  Custom snapshot identifier
+</ParamField>
+
+<ParamField body="waitMs" type="integer" default="0">
+  Wait time in milliseconds before creating snapshot (minimum: 0)
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="snapshot" type="object">
+  Created snapshot object
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/index/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "before-refactor",
+    "tags": ["stable"],
+    "modes": ["code", "prose"]
+  }'
+```
+
+### `GET /index/snapshots/{snapshotId}`
+
+Retrieve details for a specific snapshot.
+
+**Path Parameters**
+
+<ParamField path="snapshotId" type="string" required>
+  Snapshot identifier (URL-encoded)
+</ParamField>
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="snapshot" type="object">
+  Snapshot details
+</ResponseField>
+
+**Example**
+
+```bash
+curl http://127.0.0.1:7345/index/snapshots/2026-03-04T10%3A30%3A00.000Z
+```
+
+## Index Diffs
+
+### `GET /index/diffs`
+
+Lists all available index diffs.
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override
+</ParamField>
+
+<ParamField query="mode" type="string | string[]">
+  Filter by mode: `code`, `prose`, `records`
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="diffs" type="array">
+  Array of diff objects
+</ResponseField>
+
+**Example**
+
+```bash
+curl "http://127.0.0.1:7345/index/diffs?mode=code"
+```
+
+### `GET /index/diffs/{diffId}`
+
+Retrieve a specific index diff.
+
+**Path Parameters**
+
+<ParamField path="diffId" type="string" required>
+  Diff identifier (URL-encoded)
+</ParamField>
+
+**Query Parameters**
+
+<ParamField query="repo" type="string">
+  Optional repository path override
+</ParamField>
+
+<ParamField query="format" type="string" default="summary">
+  Output format: `summary` or `jsonl`
+</ParamField>
+
+<ParamField query="mode" type="string | string[]">
+  Filter events by mode
+</ParamField>
+
+<ParamField query="kind" type="string | string[]">
+  Filter events by kind
+</ParamField>
+
+<ParamField query="maxEvents" type="integer">
+  Maximum number of events (alias: `max-events`, `limit`)
+</ParamField>
+
+<ParamField query="maxBytes" type="integer">
+  Maximum output size in bytes (alias: `max-bytes`)
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean">
+  Always `true` for successful responses
+</ResponseField>
+
+<ResponseField name="diff" type="object">
+  Diff details with events
+</ResponseField>
+
+**Example**
+
+```bash
+curl "http://127.0.0.1:7345/index/diffs/snapshot1..snapshot2?format=jsonl&maxEvents=100"
+```
+
+### `GET /index/diffs/{diffId}/events`
+
+Stream diff events as newline-delimited JSON (NDJSON).
+
+**Path Parameters**
+
+<ParamField path="diffId" type="string" required>
+  Diff identifier (URL-encoded)
+</ParamField>
+
+**Query Parameters**
+
+Same as `GET /index/diffs/{diffId}`.
+
+**Response**
+
+Returns `application/x-ndjson` with one JSON object per line:
+
+```json
+{"mode":"code","kind":"added","file":"src/auth.js","symbol":"authenticate"}
+{"mode":"code","kind":"modified","file":"src/login.js","symbol":"login"}
+{"mode":"code","kind":"deleted","file":"src/old.js","symbol":"legacy"}
+```
+
+**Example**
+
+```bash
+curl "http://127.0.0.1:7345/index/diffs/snapshot1..snapshot2/events?mode=code&kind=added"
+```
+
+## Error Responses
+
+All endpoints return consistent error responses:
+
+**Error Format**
+
+<ResponseField name="ok" type="boolean">
+  Always `false` for errors
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  Error code (e.g., `INVALID_REQUEST`, `NO_INDEX`, `FORBIDDEN`)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable error message
+</ResponseField>
+
+<ResponseField name="errors" type="array" optional>
+  Validation errors (for schema failures)
+</ResponseField>
+
+<ResponseField name="error" type="string" optional>
+  Internal error details
+</ResponseField>
+
+### Common Error Codes
+
+| Status | Code | Description |
+|--------|------|-------------|
+| 400 | `INVALID_REQUEST` | Schema validation errors or invalid parameters |
+| 401 | `UNAUTHORIZED` | Missing or invalid authentication token |
+| 403 | `FORBIDDEN` | Repository path not allowed by server configuration |
+| 404 | `NOT_FOUND` | Resource not found (snapshot, diff, or endpoint) |
+| 409 | `NO_INDEX` | Index not found or not built |
+| 413 | (body too large) | Request body exceeds `--max-body-bytes` |
+| 415 | (unsupported media type) | Missing `Content-Type: application/json` |
+| 429 | `QUEUE_OVERLOADED` | Snapshot queue is full |
+| 500 | `INTERNAL` | Unexpected server error |
+
+**Example Error**
+
+```json
+{
+  "ok": false,
+  "code": "INVALID_REQUEST",
+  "message": "Invalid search payload.",
+  "errors": [
+    "#/query missing required field"
+  ]
+}
+```
+
+### Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="INVALID_REQUEST: Schema validation errors">
+    Verify required fields and data types. Common issues:
+    - Missing `query` field
+    - Invalid enum values for `mode`, `output`, or `backend`
+    - Non-integer values for numeric fields
+    - Unknown fields in request payload
+  </Accordion>
+
+  <Accordion title="UNAUTHORIZED: Missing or invalid token">
+    Set `PAIROFCLEATS_API_TOKEN` or pass `--auth-token`:
+    ```bash
+    export PAIROFCLEATS_API_TOKEN=your-secret-token
+    pairofcleats service api
+    ```
+  </Accordion>
+
+  <Accordion title="FORBIDDEN: Repository path not allowed">
+    Add repository to `--allowed-repo-roots`:
+    ```bash
+    pairofcleats service api --allowed-repo-roots "/path/to/repo1,/path/to/repo2"
+    ```
+  </Accordion>
+
+  <Accordion title="NO_INDEX: Index not found">
+    Build the index first:
+    ```bash
+    pairofcleats index build
+    ```
+    Or use the automated indexer:
+    ```bash
+    node build_index.js
+    ```
+  </Accordion>
+
+  <Accordion title="INTERNAL: Unexpected server error">
+    Check server logs for stack traces. Common causes:
+    - Corrupted index files
+    - Insufficient memory
+    - File system permissions
+    
+    Try rebuilding the index:
+    ```bash
+    pairofcleats index build --force
+    ```
+  </Accordion>
+</AccordionGroup>
+
+For detailed error code definitions, see the [API error documentation](/api/overview).

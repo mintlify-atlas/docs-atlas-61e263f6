@@ -1,0 +1,152 @@
+---
+title: CLI Overview
+description: Complete reference for PairOfCleats command-line interface
+---
+
+PairOfCleats provides a comprehensive CLI for indexing, searching, and managing code repositories.
+
+## Installation
+
+```bash
+npm install -g pairofcleats
+```
+
+## Quick Start
+
+```bash
+# Run guided setup
+pairofcleats setup
+
+# Build an index
+pairofcleats index build
+
+# Search your code
+pairofcleats search "function name"
+```
+
+## Command Categories
+
+### Core Commands
+
+<CardGroup cols={2}>
+  <Card title="Setup" icon="gear" href="/cli/setup">
+    Initial configuration and bootstrapping
+  </Card>
+  <Card title="Index" icon="database" href="/cli/index">
+    Build, watch, and validate code indexes
+  </Card>
+  <Card title="Search" icon="magnifying-glass" href="/cli/search">
+    Query indexed repositories
+  </Card>
+  <Card title="Workspace" icon="folder-tree" href="/cli/workspace">
+    Multi-repository workspace management
+  </Card>
+</CardGroup>
+
+### Service Commands
+
+<CardGroup cols={2}>
+  <Card title="Service" icon="server" href="/cli/service">
+    Run API and indexer services
+  </Card>
+  <Card title="Cache" icon="hard-drive" href="/cli/cache">
+    Manage cache storage
+  </Card>
+</CardGroup>
+
+## Global Flags
+
+These flags are available across most commands:
+
+<ParamField path="--repo" type="string">
+  Repository root path (defaults to current directory or detected repo root)
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output results in JSON format
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Display command help
+</ParamField>
+
+<ParamField path="--version" type="boolean">
+  Display version information
+</ParamField>
+
+## Common Workflows
+
+### First-Time Setup
+
+```bash
+# Interactive setup with prompts
+pairofcleats setup
+
+# Non-interactive setup for CI
+pairofcleats setup --non-interactive
+
+# Fast bootstrap without prompts
+pairofcleats bootstrap
+```
+
+### Building Indexes
+
+```bash
+# Build all modes
+pairofcleats index build
+
+# Build specific mode
+pairofcleats index build --mode code
+
+# Incremental rebuild
+pairofcleats index build --incremental
+
+# Watch for changes
+pairofcleats index watch
+```
+
+### Searching Code
+
+```bash
+# Basic search
+pairofcleats search "queryString"
+
+# Search specific mode
+pairofcleats search "queryString" --mode code
+
+# Search with custom backend
+pairofcleats search "queryString" --backend sqlite
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|----------|
+| `0` | Success |
+| `1` | General error or validation failure |
+| `2` | Invalid arguments |
+| Signal | Terminated by signal (e.g., SIGTERM, SIGINT) |
+
+## Environment Variables
+
+PairOfCleats respects several environment variables:
+
+- `PAIROFCLEATS_CACHE_ROOT` - Override cache directory
+- `PAIROFCLEATS_CONFIG` - Path to configuration file
+- `PAIROFCLEATS_TESTING` - Enable testing mode
+- `NODE_ENV` - Node environment (development, production)
+
+## Configuration
+
+CLI behavior can be customized via `.pairofcleats.json` in your repository root. See the [Configuration Guide](/configuration/config-file) for details.
+
+## Getting Help
+
+```bash
+# General help
+pairofcleats --help
+
+# Command-specific help
+pairofcleats index --help
+pairofcleats search --help
+```

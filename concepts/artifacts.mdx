@@ -1,0 +1,687 @@
+---
+title: Artifacts
+description: Artifact structure, manifests, build state, and cache identity
+---
+
+PairOfCleats index builds produce **artifacts**: structured files that represent the searchable index.
+
+## Artifact Layout
+
+Artifacts live under the per-repo cache in a deterministic structure.
+
+### Build Directory Structure
+
+```text
+<cache>/repos/<repoId>/builds/<buildId>/
+  build_state.json
+  index-code/
+    chunk_meta.jsonl
+    token_postings.json
+    file_meta.json
+    repo_map.json
+    filter_index.json
+    index_state.json
+    pieces/manifest.json
+  index-prose/
+    chunk_meta.jsonl
+    token_postings.json
+    file_meta.json
+    index_state.json
+    pieces/manifest.json
+  index-extracted-prose/
+    ...
+  index-records/
+    ...
+  index-sqlite/
+    index-code.db
+    index-prose.db
+  index-lmdb/
+    index-code/
+    index-prose/
+```
+
+**Build ID format:** `YYYYMMDDTHHMMSSZ_<scmHeadShort|noscm>_<configHash8>`
+
+Example: `20260301T120000Z_abc123_9f8e7d6c`
+
+**Repo ID:** Derived from SCM provider head and repo path
+
+### Current Pointer
+
+`<cache>/repos/<repoId>/builds/current.json` points to the active build:
+
+```json
+{
+  "buildId": "20260301T120000Z_abc123_9f8e7d6c",
+  "promotedAt": "2026-03-01T12:05:00Z"
+}
+```
+
+Only validated builds are promoted to `current.json`.
+
+**References:**
+- `docs/specs/watch-atomicity.md` - Atomic promotion
+- `docs/specs/build-state-integrity.md` - Validation gates
+
+## Core Artifacts (Per Mode)
+
+Each `index-<mode>/` directory contains mode-specific artifacts.
+
+### chunk_meta
+
+**Purpose:** Chunk metadata (IDs, file refs, positions, names, kinds)
+
+**Formats:**
+- `chunk_meta.json`: Legacy array format
+- `chunk_meta.jsonl`: Single JSONL file
+- `chunk_meta.meta.json` + `chunk_meta.parts/`: Sharded JSONL
+- `chunk_meta.columnar.json`: Columnar format
+
+**Schema (each chunk):**
+```json
+{
+  "id": 0,
+  "fileId": 123,
+  "start": 0,
+  "end": 1024,
+  "startLine": 1,
+  "endLine": 42,
+  "kind": "function",
+  "name": "chunkCode",
+  "metaV2": {
+    "schemaVersion": 3,
+    "segment": {
+      "sourceType": "pdf",
+      "pageStart": 1,
+      "pageEnd": 3,
+      "headingPath": ["Chapter 1", "Introduction"],
+      "anchor": "stable-anchor-string"
+    }
+  }
+}
+```
+
+**metaV2 compatibility:**
+- `schemaVersion=3`: Current writer shape
+- Missing `schemaVersion`: Legacy v2 semantics
+- Readers must tolerate unknown forward fields
+
+**Document extraction fields:**
+- `sourceType`: `pdf` or `docx`
+- `pageStart`/`pageEnd`: PDF page ranges
+- `paragraphStart`/`paragraphEnd`: DOCX paragraph indices
+- `headingPath`: Hierarchical heading breadcrumbs
+- `windowIndex`: Optional window number
+- `anchor`: Stable deterministic anchor
+
+### file_meta
+
+**Purpose:** File metadata (paths, extensions, sizes, hashes)
+
+**Format:** JSON array
+
+**Schema:**
+```json
+[
+  {
+    "id": 123,
+    "file": "src/indexing/chunker.js",
+    "ext": ".js",
+    "size": 4096,
+    "hash": "abc123...",
+    "hashAlgo": "sha256"
+  }
+]
+```
+
+### token_postings
+
+**Purpose:** Token vocabulary and postings lists (inverted index)
+
+**Formats:**
+- `token_postings.json`: Single file
+- `token_postings.meta.json` + `token_postings.shards/`: Sharded
+
+**Schema (token_postings.json):**
+```json
+{
+  "vocab": ["function", "chunk", "code"],
+  "postings": [
+    [0, 5, 12],
+    [0, 1, 2, 5],
+    [0, 3, 7]
+  ],
+  "docLengths": [150, 200, 175],
+  "avgDocLen": 175,
+  "totalDocs": 3
+}
+```
+
+**Sharded meta schema (token_postings.meta.json):**
+```json
+{
+  "avgDocLen": 42.1,
+  "totalDocs": 250000,
+  "format": "sharded",
+  "shardSize": 50000,
+  "vocabCount": 123456,
+  "parts": [
+    "token_postings.shards/token_postings.part-00000.json"
+  ],
+  "arrays": {
+    "docLengths": [...]
+  }
+}
+```
+
+### repo_map
+
+**Purpose:** Flattened symbol hierarchy for repo map output
+
+**Format:** JSON array
+
+**Schema:**
+```json
+[
+  {
+    "file": "src/indexing/chunker.js",
+    "symbols": [
+      {"kind": "function", "name": "chunkCode", "line": 42},
+      {"kind": "class", "name": "Chunker", "line": 100}
+    ]
+  }
+]
+```
+
+### filter_index
+
+**Purpose:** Fast metadata filters (path/lang/ext chargrams)
+
+**Format:** JSON object
+
+**Schema:**
+```json
+{
+  "fileChunksById": {
+    "0": [0, 1, 2],
+    "1": [3, 4]
+  },
+  "pathChargrams": {
+    "src": [0, 1],
+    "ind": [0, 2]
+  },
+  "metadata": {
+    "lang:javascript": [0, 1, 2],
+    "ext:.js": [0, 1, 2, 3]
+  }
+}
+```
+
+**References:**
+- `docs/guides/search.md` - Chargram prefilter behavior
+
+### index_state
+
+**Purpose:** Build feature flags, stage metadata, profile contract
+
+**Format:** JSON object
+
+**Schema:**
+```json
+{
+  "schemaVersion": "1.0.0",
+  "mode": "code",
+  "stages": {
+    "stage1": {"completed": true},
+    "stage2": {"completed": true},
+    "stage3": {"completed": false}
+  },
+  "profile": {
+    "id": "default",
+    "schemaVersion": 1
+  },
+  "artifacts": {
+    "schemaVersion": 1,
+    "present": ["chunk_meta", "token_postings", "dense_vectors_uint8"],
+    "omitted": [],
+    "requiredForSearch": ["chunk_meta", "token_postings"]
+  },
+  "extensions": {
+    "artifactCleanup": {
+      "schemaVersion": 1,
+      "profileId": "vector_only",
+      "allowlistOnly": false,
+      "actions": [
+        {"path": "token_postings.json", "recursive": false}
+      ]
+    }
+  }
+}
+```
+
+**Profile contract:**
+- `profile.id`: `default` or `vector_only`
+- `profile.schemaVersion`: Currently `1`
+- `artifacts.present`: Available artifacts
+- `artifacts.omitted`: Explicitly excluded artifacts
+- `artifacts.requiredForSearch`: Minimum artifacts for search
+
+**Artifact cleanup extension:**
+- Records which artifacts were removed by profile (e.g., `vector_only` omits sparse artifacts)
+- `allowlistOnly`: If true, only allowlisted artifacts present
+- `actions`: List of removed paths
+
+**References:**
+- `docs/contracts/indexing.md` - Index profiles
+- `docs/specs/vector-only-profile.md` - Vector-only examples
+
+## Optional Artifacts
+
+These artifacts are feature- or config-driven.
+
+### Relations
+
+**file_relations.json**: Per-file import/export/call relations
+
+```json
+{
+  "fileId": 123,
+  "imports": [
+    {"from": "./chunker", "symbols": ["chunkCode"]}
+  ],
+  "exports": [
+    {"name": "buildIndex", "kind": "function"}
+  ]
+}
+```
+
+**call_sites.jsonl**: Evidence-rich callsite records (Phase 6)
+
+```json
+{"callSiteId": "cs_001", "callerChunkId": 42, "calleeName": "chunkCode", "line": 120}
+```
+
+**References:**
+- `docs/language/import-links.md` - Relation extraction
+
+### Symbols
+
+**symbols.jsonl**: Symbol rows (JSONL or sharded JSONL)
+
+```json
+{"symbolId": "sym_001", "symbolKey": "chunkCode", "qualifiedName": "chunker.chunkCode", "kindGroup": "function"}
+```
+
+**symbol_occurrences.jsonl** or **symbol_occurrences.columnar.json**: Symbol occurrences
+
+**symbol_edges.jsonl** or **symbol_edges.columnar.json**: Symbol call/reference edges
+
+### Fielded Postings
+
+**field_postings.json** + **field_tokens.json**: Fielded vocabulary and per-chunk token arrays
+
+### Phrase and Chargrams
+
+**phrase_ngrams.json**: Phrase n-gram vocab + postings
+
+**chargram_postings.json**: Character n-gram vocab + postings
+
+### MinHash
+
+**minhash_signatures.json**: Per-chunk MinHash signatures for deduplication
+
+### Embeddings
+
+**dense_vectors_uint8.json**: Quantized merged embeddings
+
+```json
+{
+  "model": "nomic-embed-text-v1.5",
+  "dims": 768,
+  "scale": 0.01,
+  "vectors": [[...], [...]]
+}
+```
+
+**dense_vectors_doc_uint8.json**: Doc-specific embeddings
+
+**dense_vectors_code_uint8.json**: Code-specific embeddings
+
+**LanceDB indexes:**
+- `dense_vectors.lancedb/` + `dense_vectors.lancedb.meta.json`
+- `dense_vectors_doc.lancedb/` + `dense_vectors_doc.lancedb.meta.json`
+- `dense_vectors_code.lancedb/` + `dense_vectors_code.lancedb.meta.json`
+
+**LanceDB meta schema:**
+```json
+{
+  "dims": 768,
+  "count": 250000,
+  "metric": "cosine",
+  "tableName": "dense_vectors",
+  "columnName": "vector"
+}
+```
+
+<Note>
+Embeddings are also stored in an out-of-band embeddings cache (not part of build artifacts). The cache is safe to delete and will be regenerated.
+</Note>
+
+**References:**
+- `docs/guides/embeddings.md` - Embedding generation
+- `docs/specs/embeddings-cache.md` - Cache behavior
+
+### VFS Tooling Artifacts
+
+**vfs_manifest.jsonl**: Tooling VFS manifest (JSONL or sharded)
+
+```json
+{"virtualPath": "/docs/guide.md", "diskPath": "/repo/docs/guide.md", "docHash": "abc123", "segment": {...}}
+```
+
+**vfs_path_map.jsonl**: Maps virtual paths to hash-routed disk paths (when hash routing enabled)
+
+**vfs_manifest.vfsidx**: Line index for offset lookups
+
+**vfs_manifest.vfsbloom.json**: Bloom filter for fast negative checks
+
+## Pieces Manifest
+
+**pieces/manifest.json** inventories all artifacts with checksums and sizes.
+
+**Schema:**
+```json
+{
+  "version": 2,
+  "generatedAt": "2026-03-01T12:00:00Z",
+  "mode": "code",
+  "stage": "stage2",
+  "pieces": [
+    {
+      "type": "chunks",
+      "name": "chunk_meta",
+      "format": "jsonl",
+      "path": "chunk_meta.jsonl",
+      "bytes": 1234,
+      "checksum": "xxh64:deadbeef"
+    },
+    {
+      "type": "postings",
+      "name": "token_postings",
+      "format": "json",
+      "path": "token_postings.json",
+      "bytes": 5678,
+      "checksum": "xxh64:cafebabe"
+    }
+  ]
+}
+```
+
+**Checksum algorithms:**
+- `xxh64`: Preferred (fast, reliable)
+- `sha1`: Legacy (accepted for compatibility)
+
+**Strict validation:**
+- Manifest `count` values (summed across shards) match loaded record counts
+- Checksums match file contents
+- Missing entries are errors
+
+**References:**
+- `docs/contracts/artifact-contract.md` - Manifest schema
+
+## Build State
+
+**build_state.json** records build metadata and provenance.
+
+**Schema:**
+```json
+{
+  "schemaVersion": "1.0.0",
+  "signatureVersion": 1,
+  "repo": {
+    "provider": "git",
+    "head": {
+      "commitHash": "abc123...",
+      "commitShort": "abc123"
+    }
+  },
+  "buildId": "20260301T120000Z_abc123_9f8e7d6c",
+  "stages": {
+    "stage1": {"completed": true},
+    "stage2": {"completed": true},
+    "stage3": {"completed": false}
+  }
+}
+```
+
+**SCM providers:**
+- `git`: Git repository
+- `jj`: Jujutsu repository
+- `none`: No SCM (filesystem crawl)
+
+**No-SCM builds:**
+When `provider=none`:
+- Provenance fields are `null`
+- Build ID uses `noscm` marker: `20260301T120000Z_noscm_9f8e7d6c`
+- File discovery falls back to filesystem crawl
+- SCM metadata (annotate/churn) disabled with explicit log reason
+
+**References:**
+- `src/contracts/schemas/build-state.js` - Schema definition
+- `src/contracts/validators/build-state.js` - Validation
+- `docs/specs/scm-provider-contract.md` - SCM provider interface
+
+## Snapshot and Diff Artifacts (Phase 14)
+
+Snapshot and diff artifacts live alongside builds under the repo cache root.
+
+```text
+<cache>/repos/<repoId>/
+  snapshots/
+    manifest.json
+    <snapshotId>/snapshot.json
+    <snapshotId>/frozen.json
+    <snapshotId>/frozen/
+  diffs/
+    manifest.json
+    <diffId>/inputs.json
+    <diffId>/summary.json
+    <diffId>/events.jsonl
+```
+
+**Snapshot schemas:**
+- `snapshots/manifest.json`: Snapshot inventory
+- `snapshot.json`: Snapshot metadata
+- `frozen.json`: Frozen artifact references
+
+**Diff schemas:**
+- `diffs/manifest.json`: Diff inventory
+- `inputs.json`: Diff inputs (before/after snapshots)
+- `summary.json`: Diff summary stats
+- `events.jsonl`: Line-by-line diff events
+
+**References:**
+- `src/contracts/schemas/artifacts.js` - Schema keys
+- `docs/specs/index-refs-and-snapshots.md` - Snapshot specification
+- `docs/specs/index-diffs.md` - Diff specification
+
+## Artifact Formats and Precedence
+
+Artifacts support multiple formats for flexibility.
+
+### Format Precedence (chunk_meta)
+
+In **non-strict mode**, loaders prefer:
+
+1. `chunk_meta.meta.json` + `chunk_meta.parts/` (sharded JSONL, if newer mtime)
+2. `chunk_meta.jsonl` (single JSONL)
+3. `chunk_meta.columnar.json` (columnar)
+4. `chunk_meta.json` (legacy array)
+
+In **strict mode** (default), manifest determines format.
+
+### Compression
+
+- Raw `.json`/`.jsonl` files are read first
+- `.json.gz` and `.json.zst` sidecars used only if raw file missing
+- Compression is transparent (no `compression` field in payload)
+- Compression uses fflate (gzip) or @mongodb-js/zstd (zstd)
+
+### Sharded JSONL Meta Schema
+
+```json
+{
+  "schemaVersion": "0.0.1",
+  "artifact": "chunk_meta",
+  "format": "jsonl-sharded",
+  "generatedAt": "2026-03-01T12:00:00Z",
+  "compression": "none",
+  "totalRecords": 250000,
+  "totalBytes": 987654321,
+  "maxPartRecords": 100000,
+  "maxPartBytes": 104857600,
+  "targetMaxBytes": 104857600,
+  "parts": [
+    {"path": "chunk_meta.parts/chunk_meta.part-00000.jsonl", "records": 100000, "bytes": 40000000},
+    {"path": "chunk_meta.parts/chunk_meta.part-00001.jsonl", "records": 100000, "bytes": 40000000}
+  ]
+}
+```
+
+### Columnar Artifacts
+
+**chunk_meta.columnar.json**: Columnar variant of chunk_meta
+
+```json
+{
+  "format": "columnar",
+  "length": 250000,
+  "columns": {"id": [...], "fileId": [...], "start": [...], "end": [...]},
+  "arrays": {...}
+}
+```
+
+**symbol_occurrences.columnar.json** and **symbol_edges.columnar.json**: Columnar symbol artifacts
+
+Columnar format is preferred when `indexing.artifacts.chunkMetaFormat=columnar` or `indexing.artifacts.symbolArtifactsFormat=columnar`.
+
+**References:**
+- `docs/contracts/indexing.md` - Format precedence
+- `docs/specs/metadata-schema-v2.md` - Metadata schema evolution
+
+## SQLite Artifacts
+
+When SQLite backend is enabled, artifacts are materialized into databases.
+
+**Location:**
+```text
+<buildId>/index-sqlite/
+  index-code.db
+  index-prose.db
+```
+
+**Build process:**
+1. Create schema (chunks, postings, metadata tables)
+2. Bulk insert in WAL mode with large transactions
+3. Create indexes for fast lookups
+4. Optional ANN tables (if sqlite-vec available)
+5. Atomic swap from temp to final location
+
+**References:**
+- `docs/sqlite/index-schema.md` - SQLite schema
+- `docs/contracts/sqlite.md` - SQLite integration
+
+## LMDB Artifacts
+
+When LMDB backend is enabled, artifacts are stored in key-value stores.
+
+**Location:**
+```text
+<buildId>/index-lmdb/
+  index-code/
+  index-prose/
+```
+
+**Keyspace:**
+- `meta:schemaVersion` (integer)
+- `meta:createdAt` (ISO timestamp)
+- `meta:mode` (`code` or `prose`)
+- `meta:sourceIndex` (path to source index directory)
+- `meta:chunkCount` (integer)
+- `meta:artifacts` (list of stored artifact keys)
+- `artifact:chunk_meta` (msgpack-encoded chunk_meta)
+- `artifact:token_postings` (msgpack-encoded token_postings)
+- `artifact:file_meta` (msgpack-encoded file_meta)
+- ... (other artifacts)
+
+**Schema migration:**
+- If `meta:schemaVersion` missing or mismatched, LMDB store invalid
+- Falls back to file-backed indexes (unless `--backend lmdb` forced)
+- Rebuild with `pairofcleats lmdb build`
+
+**References:**
+- `src/storage/lmdb/schema.js` - LMDB schema version
+- `docs/guides/external-backends.md` - LMDB integration
+
+## Incremental Bundles
+
+Incremental caches store per-file bundles for fast rebuilds.
+
+**Location:**
+```text
+<cache>/repos/<repoId>/incremental/<mode>/files/
+  <fileHash>.json
+  <fileHash>.mpk
+```
+
+**Formats:**
+- **JSON bundles** (legacy): `*.json`
+- **MsgPack bundles**: `*.mpk` with envelope:
+  ```json
+  {
+    "format": "pairofcleats.bundle",
+    "version": 1,
+    "checksum": {"algo": "xxh64", "value": "deadbeef"},
+    "payload": {...}
+  }
+  ```
+
+**Checksum:** Covers normalized payload with stable key ordering
+
+**References:**
+- `docs/contracts/artifact-contract.md` - Bundle schema
+
+## Invariants
+
+Artifacts must satisfy strict invariants:
+
+1. **Sequential chunk IDs**: `chunk_meta` entries have zero-based sequential `id`
+2. **Unique file IDs**: `file_meta.id` values unique; referenced by `chunk_meta.fileId`
+3. **Doc lengths match**: `token_postings.docLengths.length == chunk_meta.length`
+4. **Valid postings**: Posting lists only reference valid chunk IDs
+5. **MinHash consistency**: `minhash_signatures.signatures.length == chunk_meta.length`
+6. **Vector consistency**: `dense_vectors*.vectors.length == chunk_meta.length`
+7. **LanceDB counts**: `dense_vectors*.lancedb.meta.json.count == chunk_meta.length`
+8. **Vector dims**: Dimensionality matches `dims`
+9. **Filter refs**: `filter_index.fileChunksById` references valid chunk IDs
+10. **Manifest checksums**: `pieces/manifest.json` paths exist; checksums match (xxh64 or legacy sha1)
+11. **Manifest counts**: Summed shard counts match loaded record counts (strict mode)
+12. **ConfigHash integrity**: `configHash` excludes secrets; only content-relevant inputs
+
+**Validation:**
+Run `pairofcleats index validate` to check invariants.
+
+**Remediation:**
+- **Missing artifact**: Rebuild index for affected mode
+- **Schema violations**: Rebuild index
+- **Embedding dims mismatch**: Rebuild embeddings and regenerate SQLite/ANN; clear incremental bundles
+- **Cross-reference errors**: Rebuild index
+- **SQLite table issues**: Rebuild SQLite indexes
+
+**References:**
+- `docs/contracts/indexing.md` - Invariants
+- `pairofcleats index validate` - Validation command
+
+<Info>
+Artifact validation is critical for search correctness. Always run `pairofcleats index validate` after manual artifact changes.
+</Info>
