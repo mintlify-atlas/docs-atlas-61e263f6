@@ -1,0 +1,117 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "PairOfCleats",
+  "projectDescription": "Hybrid semantic indexer and CLI for fast, filterable search across code and documentation in repositories",
+  "theme": "aspen",
+  "primaryColor": "#2563eb",
+  "lightColor": "#06b6d4",
+  "darkColor": "#0f172a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/setup",
+              "cli/index",
+              "cli/search",
+              "cli/service",
+              "cli/workspace",
+              "cli/cache"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/indexing-pipeline",
+              "concepts/retrieval-modes",
+              "concepts/artifacts",
+              "concepts/modes"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/environment-variables",
+              "configuration/cache-management"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/editor-integration",
+              "guides/mcp-server",
+              "guides/performance-tuning",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "HTTP API",
+            "pages": [
+              "api/overview",
+              "api/endpoints"
+            ]
+          },
+          {
+            "group": "MCP Server",
+            "pages": [
+              "api/mcp/overview",
+              "api/mcp/tools",
+              "api/mcp/integration"
+            ]
+          },
+          {
+            "group": "Contracts",
+            "pages": [
+              "api/contracts/artifacts",
+              "api/contracts/search"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Hybrid semantic indexing with BM25 and vector search",
+    "Multi-mode search across code, prose, and extracted documents",
+    "MCP server for AI agent workflows",
+    "Watch mode for incremental indexing",
+    "Multiple storage backends (SQLite, LMDB, LanceDB, HNSW)",
+    "HTTP API and indexer service modes",
+    "Workspace support for multi-repo indexing"
+  ],
+  "publicApiSurface": [
+    "pairofcleats setup",
+    "pairofcleats bootstrap",
+    "pairofcleats index build",
+    "pairofcleats index watch",
+    "pairofcleats index validate",
+    "pairofcleats search",
+    "pairofcleats service api",
+    "pairofcleats service indexer",
+    "pairofcleats workspace build",
+    "pairofcleats workspace manifest",
+    "pairofcleats workspace status",
+    "pairofcleats cache gc",
+    "pairofcleats lmdb build",
+    "MCP server tools (index_status, build_index, search, etc.)"
+  ]
+}
