@@ -54,6 +54,30 @@ pairofcleats search "function name"
   </Card>
 </CardGroup>
 
+### Backend Commands
+
+**LMDB build** - Build LMDB materialized index for fast queries:
+
+```bash
+pairofcleats lmdb build --repo . --mode code
+```
+
+<ParamField path="--mode" type="string">
+  Mode to build: code, prose, extracted-prose, records
+</ParamField>
+
+<ParamField path="--index-root" type="string">
+  Override index root directory
+</ParamField>
+
+<ParamField path="--snapshot" type="string">
+  Build from specific snapshot
+</ParamField>
+
+<ParamField path="--validate" type="boolean">
+  Validate LMDB after build
+</ParamField>
+
 ## Global Flags
 
 These flags are available across most commands:
